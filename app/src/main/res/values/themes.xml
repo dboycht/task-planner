@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TaskPlanner" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 状态栏/导航栏交给 enableEdgeToEdge()；窗口底色避免深浅模式闪错色。 -->
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

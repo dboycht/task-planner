@@ -16,9 +16,10 @@ local.properties
 *.keystore
 .certs/
 
-# Logs / runtime data
+# Logs / runtime data（data 必须锚定 /data/：裸 data/ 会吞掉任意层级同名目录，
+# 如 app/src/main/java/com/dboycht/taskplanner/data/ 源码包 —— memory/29 的坑）
 *.log
-data/
+/data/
 
 # Dev-only docs（只留开发副本，绝不推送）
 DEVELOPMENT.md
