@@ -1,5 +1,18 @@
 package com.dboycht.taskplanner.ui.list
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -38,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +62,9 @@ import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskGroup
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.priorityLabel
+import com.dboycht.taskplanner.ui.anim.Appear
+import com.dboycht.taskplanner.ui.anim.EASE
+import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 import com.dboycht.taskplanner.ui.celebrate.CelebrationOverlay
 import com.dboycht.taskplanner.ui.theme.priorityColor
 import java.time.Instant
@@ -61,6 +79,7 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
     var deleteTarget by remember { mutableStateOf<Task?>(null) }
     var doneExpanded by rememberSaveable { mutableStateOf(false) }
     var celebrationTrigger by remember { mutableStateOf(0) }
+    val animOn = rememberAnimationsEnabled()
 
     Box {
         Scaffold(
@@ -73,7 +92,7 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
         ) { padding ->
             val total = groups.entries.sumOf { it.value.size }
             if (total == 0) {
-                EmptyList(Modifier.padding(padding))
+                EmptyList(Modifier.padding(padding), animOn)
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -81,46 +100,70 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
                         .padding(padding),
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
+                    var appearIndex = 0
                     groups.forEach { (group, tasks) ->
                         if (group == TaskGroup.DONE) {
-                            // 已完成折叠区：默认收起（自动隐藏），点击头部展开/收起。
+                            // 已完成折叠区：头部常显（可点旋转箭头），内容展开/收起动画。
+                            val headerIdx = appearIndex++
                             item(key = "header-${group.name}") {
-                                DoneGroupHeader(
-                                    count = tasks.size,
-                                    expanded = doneExpanded,
-                                    onClick = { doneExpanded = !doneExpanded },
-                                )
+                                Appear(headerIdx, animOn) {
+                                    DoneGroupHeader(
+                                        count = tasks.size,
+                                        expanded = doneExpanded,
+                                        onClick = { doneExpanded = !doneExpanded },
+                                    )
+                                }
                             }
-                            if (doneExpanded) {
-                                items(tasks, key = { it.id }) { task ->
-                                    Box(Modifier.animateItem()) {
-                                        TaskRow(
-                                            task = task,
-                                            onClick = { onEdit(task.id) },
-                                            onToggle = { vm.toggleDone(task) },
-                                            onLongPress = { deleteTarget = task },
-                                        )
+                            item(key = "done-content") {
+                                AnimatedVisibility(
+                                    visible = doneExpanded,
+                                    enter = expandVertically(tween(260, easing = EASE)) +
+                                        fadeIn(tween(220)),
+                                    exit = shrinkVertically(tween(220, easing = EASE)) +
+                                        fadeOut(tween(160)),
+                                ) {
+                                    Column {
+                                        tasks.forEach { task ->
+                                            TaskRow(
+                                                task = task,
+                                                onClick = { onEdit(task.id) },
+                                                onToggle = { vm.toggleDone(task) },
+                                                onLongPress = { deleteTarget = task },
+                                            )
+                                        }
                                     }
                                 }
                             }
                         } else {
+                            val headerIdx = appearIndex++
                             item(key = "header-${group.name}") {
-                                GroupHeader("${group.label} · ${tasks.size}")
+                                Appear(headerIdx, animOn) {
+                                    GroupHeader("${group.label} · ${tasks.size}")
+                                }
                             }
-                            items(tasks, key = { it.id }) { task ->
-                                Box(Modifier.animateItem()) {
-                                    TaskRow(
-                                        task = task,
-                                        onClick = { onEdit(task.id) },
-                                        onToggle = {
-                                            // 未完成 → 完成才庆祝；取消完成不庆祝。
-                                            if (task.status != TaskStatus.DONE) {
-                                                celebrationTrigger++
-                                            }
-                                            vm.toggleDone(task)
-                                        },
-                                        onLongPress = { deleteTarget = task },
-                                    )
+                            val base = appearIndex
+                            appearIndex += tasks.size
+                            itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
+                                Appear(base + index, animOn) {
+                                    Box(
+                                        Modifier.animateItem(
+                                            fadeInSpec = tween(220),
+                                            fadeOutSpec = tween(180),
+                                        )
+                                    ) {
+                                        TaskRow(
+                                            task = task,
+                                            onClick = { onEdit(task.id) },
+                                            onToggle = {
+                                                // 未完成 → 完成才庆祝；取消完成不庆祝。
+                                                if (task.status != TaskStatus.DONE) {
+                                                    celebrationTrigger++
+                                                }
+                                                vm.toggleDone(task)
+                                            },
+                                            onLongPress = { deleteTarget = task },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -150,21 +193,39 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
 }
 
 @Composable
-private fun EmptyList(modifier: Modifier = Modifier) {
+private fun EmptyList(modifier: Modifier = Modifier, animOn: Boolean) {
+    // 空态 emoji 呼吸浮动（缓入缓出往返 6dp）
+    val floatDy by rememberInfiniteTransition(label = "empty-float").animateFloat(
+        initialValue = -6f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(
+            tween(1600, easing = EASE),
+            RepeatMode.Reverse,
+        ),
+        label = "dy",
+    )
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("📝", style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.height(8.dp))
-            Text("还没有任务", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
             Text(
-                "点右下角「＋」添加第一个任务",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "📝",
+                style = MaterialTheme.typography.displaySmall,
+                modifier = if (animOn) {
+                    Modifier.graphicsLayer { translationY = floatDy.dp.toPx() }
+                } else Modifier,
             )
+            Spacer(Modifier.height(8.dp))
+            Appear(1, animOn) { Text("还没有任务", style = MaterialTheme.typography.titleMedium) }
+            Spacer(Modifier.height(4.dp))
+            Appear(2, animOn) {
+                Text(
+                    "点右下角「＋」添加第一个任务",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -179,9 +240,14 @@ private fun GroupHeader(text: String) {
     )
 }
 
-/** 可折叠的「已完成项目」头部：数量常显，箭头指示展开状态。 */
+/** 可折叠的「已完成项目」头部：数量常显，箭头随展开状态旋转 90°。 */
 @Composable
 private fun DoneGroupHeader(count: Int, expanded: Boolean, onClick: () -> Unit) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(200, easing = EASE),
+        label = "arrow",
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -197,9 +263,10 @@ private fun DoneGroupHeader(count: Int, expanded: Boolean, onClick: () -> Unit) 
         )
         Spacer(Modifier.width(4.dp))
         Text(
-            if (expanded) "▾" else "▸",
+            "▸",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.rotate(arrowRotation),
         )
     }
 }
@@ -264,6 +331,15 @@ private fun TaskRow(
 private fun ToggleCircle(done: Boolean, onClick: () -> Unit) {
     val borderColor =
         if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    // 勾选 ✓ 弹性放大进场（取消勾选时弹缩退场）
+    val checkScale by animateFloatAsState(
+        targetValue = if (done) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "check",
+    )
     Box(
         modifier = Modifier
             .size(24.dp)
@@ -272,11 +348,15 @@ private fun ToggleCircle(done: Boolean, onClick: () -> Unit) {
             .border(1.5.dp, borderColor, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        if (done) {
+        if (checkScale > 0.01f) {
             Text(
                 "✓",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = checkScale
+                    scaleY = checkScale
+                },
             )
         }
     }

@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dboycht.taskplanner.model.summary
+import com.dboycht.taskplanner.ui.anim.Appear
+import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 
 /** 预设管理：内置预设只读展示，自建预设点击进入编辑。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,6 +36,7 @@ fun PresetListScreen(
 ) {
     val vm: PresetListViewModel = viewModel()
     val groups by vm.groups.collectAsStateWithLifecycle()
+    val animOn = rememberAnimationsEnabled()
 
     Scaffold(
         topBar = {
@@ -53,46 +56,58 @@ fun PresetListScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            var idx = 0
             if (groups.builtIn.isNotEmpty()) {
-                item { SectionHeader("内置预设") }
-                items(groups.builtIn.size) { index ->
-                    val preset = groups.builtIn[index]
-                    PresetRow(
-                        title = preset.name,
-                        subtitle = preset.policy.summary(),
-                        badge = "内置",
-                        onClick = null,
-                    )
+                item { Appear(idx++, animOn) { SectionHeader("内置预设") } }
+                groups.builtIn.forEach { preset ->
+                    item(key = "built-${preset.id}") {
+                        Appear(idx++, animOn) {
+                            PresetRow(
+                                title = preset.name,
+                                subtitle = preset.policy.summary(),
+                                badge = "内置",
+                                onClick = null,
+                            )
+                        }
+                    }
                 }
             }
-            val customHeader = if (groups.custom.isEmpty()) "我的预设"
-            else "我的预设 · ${groups.custom.size}"
-            item { SectionHeader(customHeader) }
+            item { Appear(idx++, animOn) { SectionHeader(customHeader(groups.custom.size)) } }
             if (groups.custom.isEmpty()) {
                 item {
-                    Text(
-                        "还没有自定义预设，点右上角「＋ 新建」创建。\n例如：预设 A = 截止前 7 天、3 天、1 小时各提醒一次。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
+                    Appear(idx, animOn) {
+                        Text(
+                            "还没有自定义预设，点右上角「＋ 新建」创建。\n例如：预设 A = 截止前 7 天、3 天、1 小时各提醒一次。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             } else {
-                items(groups.custom.size) { index ->
-                    val preset = groups.custom[index]
-                    PresetRow(
-                        title = preset.name,
-                        subtitle = preset.policy.summary(),
-                        badge = null,
-                        onClick = { onEdit(preset.id) },
-                    )
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                groups.custom.forEach { preset ->
+                    item(key = "custom-${preset.id}") {
+                        Appear(idx++, animOn) {
+                            Column {
+                                PresetRow(
+                                    title = preset.name,
+                                    subtitle = preset.policy.summary(),
+                                    badge = null,
+                                    onClick = { onEdit(preset.id) },
+                                )
+                                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                            }
+                        }
+                    }
                 }
             }
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
 }
+
+private fun customHeader(count: Int): String =
+    if (count == 0) "我的预设" else "我的预设 · $count"
 
 @Composable
 private fun SectionHeader(text: String) {

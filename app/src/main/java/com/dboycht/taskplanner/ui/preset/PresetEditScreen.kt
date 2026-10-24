@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dboycht.taskplanner.model.ReminderAnchor
 import com.dboycht.taskplanner.model.ReminderPoint
 import com.dboycht.taskplanner.model.formatOffsetMinutes
+import com.dboycht.taskplanner.ui.anim.Appear
+import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 
 /** 快捷提前量档（分钟）。 */
 private val QUICK_OFFSETS = listOf(0, 10, 30, 60, 120, 1440, 2880, 4320, 10080)
@@ -56,6 +58,7 @@ fun PresetEditScreen(
     val error = vm.error
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val animOn = rememberAnimationsEnabled()
 
     Scaffold(
         topBar = {
@@ -81,36 +84,45 @@ fun PresetEditScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = draft.name,
-                onValueChange = vm::updateName,
-                label = { Text("预设名称") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Text(
-                "提醒点（${draft.points.size} 个）",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            draft.points.forEachIndexed { index, point ->
-                Row(
+            Appear(0, animOn) {
+                OutlinedTextField(
+                    value = draft.name,
+                    onValueChange = vm::updateName,
+                    label = { Text("预设名称") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "${anchorLabel(point.anchor)}前 ${formatOffsetMinutes(point.offsetMinutes)}"
-                            .let { if (point.offsetMinutes == 0) anchorNow(point.anchor) else it },
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { vm.removePoint(index) }) { Text("移除") }
-                }
-                HorizontalDivider()
+                )
             }
-            OutlinedButton(onClick = { showAddDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("＋ 添加提醒点")
+
+            Appear(1, animOn) {
+                Column {
+                    Text(
+                        "提醒点（${draft.points.size} 个）",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    draft.points.forEachIndexed { index, point ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${anchorLabel(point.anchor)}前 ${formatOffsetMinutes(point.offsetMinutes)}"
+                                    .let { if (point.offsetMinutes == 0) anchorNow(point.anchor) else it },
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { vm.removePoint(index) }) { Text("移除") }
+                        }
+                        HorizontalDivider()
+                    }
+                    OutlinedButton(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("＋ 添加提醒点")
+                    }
+                }
             }
 
             if (error != null) {

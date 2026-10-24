@@ -2,6 +2,14 @@ package com.dboycht.taskplanner.ui.edit
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +68,8 @@ import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.isUsableFor
 import com.dboycht.taskplanner.model.missingAnchorLabel
 import com.dboycht.taskplanner.model.summary
+import com.dboycht.taskplanner.ui.anim.Appear
+import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 import com.dboycht.taskplanner.ui.theme.priorityColor
 import java.time.Instant
 import java.time.ZoneId
@@ -82,6 +92,7 @@ fun EditScreen(
     val isNew = draft.id == 0L
     val error = vm.error
     var showPresetSheet by remember { mutableStateOf(false) }
+    val animOn = rememberAnimationsEnabled()
 
     Scaffold(
         topBar = {
@@ -107,73 +118,91 @@ fun EditScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = draft.title,
-                onValueChange = vm::updateTitle,
-                label = { Text("标题") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = draft.description,
-                onValueChange = vm::updateDescription,
-                label = { Text("描述（可选）") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Appear(0, animOn) {
+                OutlinedTextField(
+                    value = draft.title,
+                    onValueChange = vm::updateTitle,
+                    label = { Text("标题") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Appear(1, animOn) {
+                OutlinedTextField(
+                    value = draft.description,
+                    onValueChange = vm::updateDescription,
+                    label = { Text("描述（可选）") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
-            PrioritySlider(priority = draft.priority, onSelected = vm::updatePriority)
+            Appear(2, animOn) {
+                PrioritySlider(priority = draft.priority, onSelected = vm::updatePriority)
+            }
 
-            SectionLabel("状态")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                TaskStatus.entries.forEachIndexed { index, s ->
-                    SegmentedButton(
-                        selected = draft.status == s,
-                        onClick = { vm.updateStatus(s) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = TaskStatus.entries.size,
-                        ),
-                    ) { Text(s.label) }
+            Appear(3, animOn) {
+                Column {
+                    SectionLabel("状态")
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        TaskStatus.entries.forEachIndexed { index, s ->
+                            SegmentedButton(
+                                selected = draft.status == s,
+                                onClick = { vm.updateStatus(s) },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = TaskStatus.entries.size,
+                                ),
+                            ) { Text(s.label) }
+                        }
+                    }
                 }
             }
 
-            TimeField(label = "开始时间", value = draft.startTime, onSet = vm::setStart)
-            TimeField(label = "截止时间", value = draft.dueTime, onSet = vm::setDue)
+            Appear(4, animOn) {
+                TimeField(label = "开始时间", value = draft.startTime, onSet = vm::setStart)
+            }
+            Appear(5, animOn) {
+                TimeField(label = "截止时间", value = draft.dueTime, onSet = vm::setDue)
+            }
 
-            OutlinedTextField(
-                value = draft.tags,
-                onValueChange = vm::updateTags,
-                label = { Text("标签（逗号分隔，可选）") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Appear(6, animOn) {
+                OutlinedTextField(
+                    value = draft.tags,
+                    onValueChange = vm::updateTags,
+                    label = { Text("标签（逗号分隔，可选）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             // 提醒预设选择入口
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { showPresetSheet = true }
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
+            Appear(7, animOn) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showPresetSheet = true }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "提醒",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            draft.reminderPolicy.summary(),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     Text(
-                        "提醒",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        draft.reminderPolicy.summary(),
+                        "选择 ›",
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                Text(
-                    "选择 ›",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
             }
 
             if (error != null) {
@@ -458,10 +487,15 @@ private fun QuickTimeChips(onPick: (hour: Int, minute: Int) -> Unit) {
     }
 }
 
-/** 无极优先级滑块：整条渐变带（蓝→红）叠透明轨道 Slider，thumb 取当前值颜色。 */
+/** 无极优先级滑块：整条渐变带（蓝→红）叠透明轨道 Slider，thumb 取当前值颜色；数值滚动切换。 */
 @Composable
 private fun PrioritySlider(priority: Int, onSelected: (Int) -> Unit) {
-    val color = priorityColor(priority)
+    // 颜色平滑过渡（thumb、数值、渐变位置联动）
+    val animatedColor by animateColorAsState(
+        targetValue = priorityColor(priority),
+        animationSpec = tween(180),
+        label = "priority-color",
+    )
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -473,12 +507,25 @@ private fun PrioritySlider(priority: Int, onSelected: (Int) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.weight(1f))
-            Text(
-                "$priority",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = color,
-            )
+            // 数值滚动切换（旧值上移淡出、新值下移淡入）
+            AnimatedContent(
+                targetState = priority,
+                transitionSpec = {
+                    (
+                        slideInVertically(tween(180)) { it / 2 } + fadeIn(tween(180))
+                        ) togetherWith (
+                        slideOutVertically(tween(180)) { -it / 2 } + fadeOut(tween(140))
+                        )
+                },
+                label = "priority-value",
+            ) { value ->
+                Text(
+                    "$value",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = animatedColor,
+                )
+            }
         }
         Box(
             modifier = Modifier
@@ -504,7 +551,7 @@ private fun PrioritySlider(priority: Int, onSelected: (Int) -> Unit) {
                 onValueChange = { onSelected(it.roundToInt()) },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
-                    thumbColor = color,
+                    thumbColor = animatedColor,
                     activeTrackColor = Color.Transparent,
                     inactiveTrackColor = Color.Transparent,
                 ),
