@@ -9,9 +9,13 @@ import androidx.lifecycle.viewModelScope
 import com.dboycht.taskplanner.TaskPlannerApp
 import com.dboycht.taskplanner.model.Priority
 import com.dboycht.taskplanner.model.ReminderPolicy
+import com.dboycht.taskplanner.model.ReminderPreset
 import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.TaskValidator
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -21,6 +25,11 @@ import kotlinx.coroutines.launch
 class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = (app as TaskPlannerApp).repository
+
+    /** 预设列表（供提醒选择 sheet 用；选择时只拷贝策略值）。 */
+    val presets: StateFlow<List<ReminderPreset>> =
+        (app as TaskPlannerApp).presetRepository.observePresets()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     data class Draft(
         val id: Long = 0L,
@@ -79,6 +88,11 @@ class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
     fun updateTags(v: String) { draft = draft.copy(tags = v) }
     fun setStart(v: Long?) { draft = draft.copy(startTime = v) }
     fun setDue(v: Long?) { draft = draft.copy(dueTime = v) }
+
+    /** 选定预设/不提醒：拷贝策略值进草稿（之后预设再改不影响本任务）。 */
+    fun selectPolicy(policy: ReminderPolicy) {
+        draft = draft.copy(reminderPolicy = policy)
+    }
 
     /** 校验通过才落库（保存按钮也已按同一条件禁用）。 */
     fun save(onSaved: () -> Unit) {

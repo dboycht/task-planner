@@ -4,8 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +16,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -25,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,12 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dboycht.taskplanner.model.Priority
-import com.dboycht.taskplanner.model.ReminderAnchor
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.TaskStatus
+import com.dboycht.taskplanner.model.summary
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -49,12 +56,18 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditScreen(taskKey: String, onBack: () -> Unit) {
+fun EditScreen(
+    taskKey: String,
+    onBack: () -> Unit,
+    onOpenPresets: () -> Unit,
+) {
     val vm: TaskEditViewModel = viewModel(key = "edit-$taskKey")
     LaunchedEffect(taskKey) { vm.load(taskKey.toLongOrNull()) }
     val draft = vm.draft
+    val presets by vm.presets.collectAsStateWithLifecycle()
     val isNew = draft.id == 0L
     val error = vm.error
+    var showPresetSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -134,11 +147,33 @@ fun EditScreen(taskKey: String, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(
-                text = "提醒：${policySummary(draft.reminderPolicy)}（自定义配置随提醒功能开放）",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // 提醒预设选择入口
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { showPresetSheet = true }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "提醒",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        draft.reminderPolicy.summary(),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Text(
+                    "选择 ›",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
             if (error != null) {
                 Text(
                     error,
@@ -146,6 +181,103 @@ fun EditScreen(taskKey: String, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+    }
+
+    if (showPresetSheet) {
+        PresetPickerSheet(
+            presets = presets,
+            currentPolicy = draft.reminderPolicy,
+            onSelect = {
+                vm.selectPolicy(it)
+                showPresetSheet = false
+            },
+            onManage = {
+                showPresetSheet = false
+                onOpenPresets()
+            },
+            onDismiss = { showPresetSheet = false },
+        )
+    }
+}
+
+/** 提醒预设选择：不提醒 + 内置/自建预设单选 + 管理入口。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PresetPickerSheet(
+    presets: List<com.dboycht.taskplanner.model.ReminderPreset>,
+    currentPolicy: ReminderPolicy,
+    onSelect: (ReminderPolicy) -> Unit,
+    onManage: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Text(
+            "提醒预设",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        // 「不提醒」
+        PresetRow(
+            title = "不提醒",
+            subtitle = "关闭任务提醒",
+            selected = currentPolicy.points.isEmpty(),
+            onClick = { onSelect(ReminderPolicy(emptyList())) },
+        )
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        presets.forEach { preset ->
+            PresetRow(
+                title = preset.name,
+                subtitle = preset.policy.summary(),
+                selected = currentPolicy.points == preset.policy.points,
+                onClick = { onSelect(preset.policy) },
+            )
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        TextButton(
+            onClick = onManage,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Text("管理预设（新建 / 编辑 / 删除）")
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PresetRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (selected) {
+            Text(
+                "✓",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
@@ -259,16 +391,3 @@ private val dateTimeFmt = DateTimeFormatter.ofPattern("MM-dd HH:mm")
 
 private fun fmtDateTime(epochMillis: Long): String =
     dateTimeFmt.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
-
-/** 策略的人话摘要（M3 提供配置 UI，这里先只读展示）。 */
-internal fun policySummary(policy: ReminderPolicy): String {
-    if (policy.points.isEmpty()) return "关闭"
-    return policy.points.joinToString("、") { p ->
-        when (p.anchor) {
-            ReminderAnchor.START ->
-                if (p.offsetMinutes == 0) "开始时" else "开始前 ${p.offsetMinutes} 分钟"
-            ReminderAnchor.DUE ->
-                if (p.offsetMinutes == 0) "截止时" else "截止前 ${p.offsetMinutes} 分钟"
-        }
-    }
-}

@@ -9,7 +9,7 @@ enum class TaskGroup(val label: String) {
     TODAY("今日"),
     UPCOMING("近期"),
     NO_DATE("无日期"),
-    DONE("已完成");
+    DONE("已完成项目");
 }
 
 /** 纯函数分组/排序（JVM 可单测）。 */

@@ -7,22 +7,63 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.dboycht.taskplanner.ui.edit.EditScreen
 import com.dboycht.taskplanner.ui.list.TaskListScreen
+import com.dboycht.taskplanner.ui.preset.PresetEditScreen
+import com.dboycht.taskplanner.ui.preset.PresetListScreen
 
-/**
- * M1 用状态导航（列表 ↔ 编辑），不引 navigation-compose；
- * M2 加入设置页时再评估是否换正式导航。
- * editKey：null = 列表；"new" = 新建；"<id>" = 编辑对应任务。
- */
+/** 页面栈（状态导航，不引 navigation-compose；M2 设置页加入时再评估）。 */
+sealed interface Screen {
+    data object List : Screen
+    data class EditTask(val taskId: Long?) : Screen
+    data object Presets : Screen
+    data class EditPreset(val presetId: Long?) : Screen
+}
+
+/** 编码成 Bundle 兼容的字符串以支持 rememberSaveable（进程重建不丢栈）。 */
+private fun Screen.encode(): String = when (this) {
+    is Screen.List -> "list"
+    is Screen.EditTask -> "task:${taskId ?: "new"}"
+    is Screen.Presets -> "presets"
+    is Screen.EditPreset -> "preset:${presetId ?: "new"}"
+}
+
+private fun decodeScreen(raw: String): Screen = when {
+    raw == "list" -> Screen.List
+    raw == "presets" -> Screen.Presets
+    raw.startsWith("task:") ->
+        Screen.EditTask(raw.removePrefix("task:").toLongOrNull())
+    raw.startsWith("preset:") ->
+        Screen.EditPreset(raw.removePrefix("preset:").toLongOrNull())
+    else -> Screen.List
+}
+
 @Composable
 fun TaskPlannerRoot() {
-    var editKey by rememberSaveable { mutableStateOf<String?>(null) }
-    when (val key = editKey) {
-        null -> TaskListScreen(
-            onEdit = { id -> editKey = if (id == null) "new" else id.toString() },
+    var stackKeys by rememberSaveable { mutableStateOf(listOf(Screen.List.encode())) }
+
+    fun push(screen: Screen) {
+        stackKeys = stackKeys + screen.encode()
+    }
+
+    fun back() {
+        if (stackKeys.size > 1) stackKeys = stackKeys.dropLast(1)
+    }
+
+    when (val current = decodeScreen(stackKeys.last())) {
+        is Screen.List -> TaskListScreen(
+            onEdit = { id -> push(Screen.EditTask(id)) },
         )
-        else -> EditScreen(
-            taskKey = key,
-            onBack = { editKey = null },
+        is Screen.EditTask -> EditScreen(
+            taskKey = current.taskId?.toString() ?: "new",
+            onBack = ::back,
+            onOpenPresets = { push(Screen.Presets) },
+        )
+        is Screen.Presets -> PresetListScreen(
+            onBack = ::back,
+            onEdit = { id -> push(Screen.EditPreset(id)) },
+        )
+        is Screen.EditPreset -> PresetEditScreen(
+            presetKey = current.presetId?.toString() ?: "new",
+            onBack = ::back,
         )
     }
 }
