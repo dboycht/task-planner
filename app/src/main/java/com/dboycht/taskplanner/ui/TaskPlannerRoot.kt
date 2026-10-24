@@ -1,5 +1,6 @@
 package com.dboycht.taskplanner.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,10 @@ fun TaskPlannerRoot() {
     fun back() {
         if (stackKeys.size > 1) stackKeys = stackKeys.dropLast(1)
     }
+
+    // 接管系统返回（手势侧滑 / 返回键）：子页面返回上一页，栈底（列表）才放行默认退出。
+    // 没有这个接管，自定义栈导航下任何页面的侧滑返回都会直接退出应用。
+    BackHandler(enabled = stackKeys.size > 1) { back() }
 
     when (val current = decodeScreen(stackKeys.last())) {
         is Screen.List -> TaskListScreen(
