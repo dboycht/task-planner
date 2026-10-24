@@ -73,3 +73,27 @@ fun ReminderPolicy.summary(): String {
         }
     }
 }
+
+/**
+ * 预设可用性判定：策略里每个提醒点依赖的锚点时间都必须已设置
+ * （含截止提醒 → 需有截止时间；含开始提醒 → 需有开始时间）。空策略恒可用。
+ */
+fun ReminderPolicy.isUsableFor(startTime: Long?, dueTime: Long?): Boolean =
+    points.all { p ->
+        when (p.anchor) {
+            ReminderAnchor.START -> startTime != null
+            ReminderAnchor.DUE -> dueTime != null
+        }
+    }
+
+/** 不可用时的原因文案（可用于 UI 灰化提示）；可用返回 null。 */
+fun ReminderPolicy.missingAnchorLabel(startTime: Long?, dueTime: Long?): String? {
+    val needStart = points.any { it.anchor == ReminderAnchor.START } && startTime == null
+    val needDue = points.any { it.anchor == ReminderAnchor.DUE } && dueTime == null
+    return when {
+        needStart && needDue -> "需先设置开始与截止时间"
+        needStart -> "需先设置开始时间"
+        needDue -> "需先设置截止时间"
+        else -> null
+    }
+}

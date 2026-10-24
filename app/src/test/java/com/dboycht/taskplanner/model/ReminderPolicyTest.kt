@@ -69,4 +69,43 @@ class ReminderPolicyTest {
             policy.triggersFor(startTime = null, dueTime = 123L),
         )
     }
+
+    // ---------- 可用性判定（预设灰化） ----------
+
+    @Test
+    fun `空策略恒可用`() {
+        assertEquals(true, ReminderPolicy(emptyList()).isUsableFor(null, null))
+    }
+
+    @Test
+    fun `含截止提醒的策略需截止时间`() {
+        val dueOnly = ReminderPolicy(listOf(ReminderPoint(ReminderAnchor.DUE, 60)))
+        assertEquals(false, dueOnly.isUsableFor(startTime = 123L, dueTime = null))
+        assertEquals(true, dueOnly.isUsableFor(startTime = null, dueTime = 456L))
+        assertEquals("需先设置截止时间", dueOnly.missingAnchorLabel(123L, null))
+        assertEquals(null, dueOnly.missingAnchorLabel(null, 456L))
+    }
+
+    @Test
+    fun `含开始提醒的策略需开始时间`() {
+        val startOnly = ReminderPolicy(listOf(ReminderPoint(ReminderAnchor.START, 0)))
+        assertEquals(false, startOnly.isUsableFor(startTime = null, dueTime = 456L))
+        assertEquals("需先设置开始时间", startOnly.missingAnchorLabel(null, 456L))
+    }
+
+    @Test
+    fun `双锚点策略缺任一即不可用并给出完整原因`() {
+        val both = ReminderPolicy(
+            listOf(
+                ReminderPoint(ReminderAnchor.START, 0),
+                ReminderPoint(ReminderAnchor.DUE, 30),
+            )
+        )
+        assertEquals(false, both.isUsableFor(null, null))
+        assertEquals("需先设置开始与截止时间", both.missingAnchorLabel(null, null))
+        assertEquals(false, both.isUsableFor(1L, null))
+        assertEquals("需先设置截止时间", both.missingAnchorLabel(1L, null))
+        assertEquals(true, both.isUsableFor(1L, 2L))
+        assertEquals(null, both.missingAnchorLabel(1L, 2L))
+    }
 }

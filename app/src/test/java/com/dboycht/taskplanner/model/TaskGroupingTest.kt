@@ -83,9 +83,10 @@ class TaskGroupingTest {
     }
 
     @Test
-    fun `没有任何时间进 NO_DATE 组`() {
+    fun `开始与截止都未设置进未定时组`() {
         val t = task(1)
         assertEquals(TaskGroup.NO_DATE, TaskGrouper.groupOf(t, now, zone))
+        assertEquals("未定时", TaskGroup.NO_DATE.label)
     }
 
     // ---------- 排序 ----------
@@ -133,16 +134,16 @@ class TaskGroupingTest {
     // ---------- 组装 ----------
 
     @Test
-    fun `分组结果的键按展示顺序排列且只含有任务的组`() {
+    fun `分组键按展示顺序排列且未定时最前已完成垫底`() {
         val tasks = listOf(
             task(1, due = millisOf(2026, 10, 23, 18, 0)), // OVERDUE
             task(2, due = millisOf(2026, 10, 24, 18, 0)), // TODAY
-            task(3),                                      // NO_DATE
+            task(3),                                      // NO_DATE（未定时）
             task(4, status = TaskStatus.DONE, completedAt = 1L, updatedAt = 1L), // DONE
         )
         val grouped = TaskGrouper.groupAndSort(tasks, now, zone)
         assertEquals(
-            listOf(TaskGroup.OVERDUE, TaskGroup.TODAY, TaskGroup.NO_DATE, TaskGroup.DONE),
+            listOf(TaskGroup.NO_DATE, TaskGroup.OVERDUE, TaskGroup.TODAY, TaskGroup.DONE),
             grouped.keys.toList(),
         )
     }

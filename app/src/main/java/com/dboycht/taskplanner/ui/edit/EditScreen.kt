@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
@@ -56,6 +57,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.TaskStatus
+import com.dboycht.taskplanner.model.isUsableFor
+import com.dboycht.taskplanner.model.missingAnchorLabel
 import com.dboycht.taskplanner.model.summary
 import com.dboycht.taskplanner.ui.theme.priorityColor
 import java.time.Instant
@@ -187,6 +190,8 @@ fun EditScreen(
         PresetPickerSheet(
             presets = presets,
             currentPolicy = draft.reminderPolicy,
+            startTime = draft.startTime,
+            dueTime = draft.dueTime,
             onSelect = {
                 vm.selectPolicy(it)
                 showPresetSheet = false
@@ -200,12 +205,14 @@ fun EditScreen(
     }
 }
 
-/** 提醒预设选择：不提醒 + 内置/自建预设单选 + 管理入口。 */
+/** 提醒预设选择：不提醒 + 内置/自建预设单选 + 管理入口；缺锚点时间的预设灰化不可选。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PresetPickerSheet(
     presets: List<com.dboycht.taskplanner.model.ReminderPreset>,
     currentPolicy: ReminderPolicy,
+    startTime: Long?,
+    dueTime: Long?,
     onSelect: (ReminderPolicy) -> Unit,
     onManage: () -> Unit,
     onDismiss: () -> Unit,
@@ -220,11 +227,13 @@ private fun PresetPickerSheet(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
-        // 「不提醒」
+        // 「不提醒」恒可用
         PresetRow(
             title = "不提醒",
             subtitle = "关闭任务提醒",
             selected = currentPolicy.points.isEmpty(),
+            enabled = true,
+            reason = null,
             onClick = { onSelect(ReminderPolicy(emptyList())) },
         )
         HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
@@ -232,7 +241,10 @@ private fun PresetPickerSheet(
             PresetRow(
                 title = preset.name,
                 subtitle = preset.policy.summary(),
-                selected = currentPolicy.points == preset.policy.points,
+                selected = currentPolicy.points == preset.policy.points &&
+                    preset.policy.isUsableFor(startTime, dueTime),
+                enabled = preset.policy.isUsableFor(startTime, dueTime),
+                reason = preset.policy.missingAnchorLabel(startTime, dueTime),
                 onClick = { onSelect(preset.policy) },
             )
         }
@@ -254,24 +266,41 @@ private fun PresetRow(
     title: String,
     subtitle: String,
     selected: Boolean,
+    enabled: Boolean,
+    reason: String?,
     onClick: () -> Unit,
 ) {
+    val rowAlpha = if (enabled) 1f else 0.38f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.alpha(rowAlpha),
             )
+            if (!enabled && reason != null) {
+                // 不可用原因用强调色小字（灰化行内唯一的彩色信号）
+                Text(
+                    reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.alpha(rowAlpha),
+                )
+            }
         }
-        if (selected) {
+        if (selected && enabled) {
             Text(
                 "✓",
                 style = MaterialTheme.typography.titleMedium,
