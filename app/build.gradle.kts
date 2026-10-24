@@ -36,6 +36,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // 个人项目：release 沿用 debug 签名（暂无正式 keystore），Release 说明中注明。
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
