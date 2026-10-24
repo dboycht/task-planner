@@ -1,0 +1,33 @@
+# Gradle / build
+.gradle/
+build/
+*/build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Local config (SDK 路径等，绝不入库)
+local.properties
+
+# Signing
+*.jks
+*.keystore
+.certs/
+
+# Logs / runtime data
+*.log
+data/
+
+# Dev-only docs（只留开发副本，绝不推送）
+DEVELOPMENT.md
+ERROR.md
+HANDOVER.md
+_research/
+_scratch/
+capture/
+
+# OS
+.DS_Store
+Thumbs.db
