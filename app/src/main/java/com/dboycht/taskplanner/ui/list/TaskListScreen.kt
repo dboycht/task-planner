@@ -43,11 +43,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.dboycht.taskplanner.model.Priority
 import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskGroup
 import com.dboycht.taskplanner.model.TaskStatus
+import com.dboycht.taskplanner.model.priorityLabel
 import com.dboycht.taskplanner.ui.celebrate.CelebrationOverlay
+import com.dboycht.taskplanner.ui.theme.priorityColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -282,19 +283,15 @@ private fun ToggleCircle(done: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PriorityChip(priority: Priority) {
-    val color = when (priority) {
-        Priority.HIGH -> MaterialTheme.colorScheme.error
-        Priority.MEDIUM -> MaterialTheme.colorScheme.tertiary
-        Priority.LOW -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+private fun PriorityChip(priority: Int) {
+    val color = priorityColor(priority)
     Surface(
         shape = RoundedCornerShape(50),
-        color = color.copy(alpha = 0.12f),
+        color = color.copy(alpha = 0.15f),
         contentColor = color,
     ) {
         Text(
-            priority.label,
+            priorityLabel(priority),
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )

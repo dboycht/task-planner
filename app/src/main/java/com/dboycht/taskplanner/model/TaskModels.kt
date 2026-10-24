@@ -1,10 +1,20 @@
 package com.dboycht.taskplanner.model
 
-/** 优先级。ordinal 越小越紧急。 */
-enum class Priority(val label: String) {
-    HIGH("高"),
-    MEDIUM("中"),
-    LOW("低");
+/**
+ * 优先级：0~100 连续值（0 = 最低，蓝色；100 = 最高，红色；颜色由 UI 层插值）。
+ * 历史版本曾是三档枚举（HIGH=0/MEDIUM=1/LOW=2 的 ordinal），DB v3 迁移时已换算为 100/50/0。
+ */
+const val PRIORITY_MIN = 0
+const val PRIORITY_MAX = 100
+const val PRIORITY_DEFAULT = 50
+
+fun clampPriority(value: Int): Int = value.coerceIn(PRIORITY_MIN, PRIORITY_MAX)
+
+/** 区间标签（文案用；数值本身连续无极）。<34 低 / <67 中 / 其余 高。 */
+fun priorityLabel(priority: Int): String = when {
+    priority < 34 -> "低"
+    priority < 67 -> "中"
+    else -> "高"
 }
 
 /** 任务状态。 */
@@ -76,7 +86,7 @@ data class Task(
     val description: String = "",
     val startTime: Long? = null,
     val dueTime: Long? = null,
-    val priority: Priority = Priority.MEDIUM,
+    val priority: Int = PRIORITY_DEFAULT,
     val status: TaskStatus = TaskStatus.TODO,
     val tags: List<String> = emptyList(),
     val reminderPolicy: ReminderPolicy = ReminderPolicy.DEFAULT,

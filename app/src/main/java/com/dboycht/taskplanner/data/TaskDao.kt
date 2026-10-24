@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
 
-    /** 无截止的排最后，其余按到期升序；组内二次排序在领域层做。 */
-    @Query("SELECT * FROM tasks ORDER BY dueTime IS NULL, dueTime, priority, title")
+    /** 无截止的排最后，其余按到期升序；priority 为 0~100 连续值，越大越紧急 → 降序。 */
+    @Query("SELECT * FROM tasks ORDER BY dueTime IS NULL, dueTime, priority DESC, title")
     fun observeAll(): Flow<List<TaskEntity>>
 
     @Query("SELECT * FROM tasks WHERE id = :id")

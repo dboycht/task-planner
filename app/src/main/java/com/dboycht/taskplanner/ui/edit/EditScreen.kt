@@ -1,7 +1,9 @@
 package com.dboycht.taskplanner.ui.edit
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -45,15 +47,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.dboycht.taskplanner.model.Priority
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.summary
+import com.dboycht.taskplanner.ui.theme.priorityColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -425,16 +429,10 @@ private fun QuickTimeChips(onPick: (hour: Int, minute: Int) -> Unit) {
     }
 }
 
-/** 优先级滑动条：低（绿）↔ 中（琥珀）↔ 高（红），三档吸附。 */
+/** 无极优先级滑块：整条渐变带（蓝→红）叠透明轨道 Slider，thumb 取当前值颜色。 */
 @Composable
-private fun PrioritySlider(priority: Priority, onSelected: (Priority) -> Unit) {
-    val color = when (priority) {
-        Priority.LOW -> Color(0xFF43A047)
-        Priority.MEDIUM -> Color(0xFFFB8C00)
-        Priority.HIGH -> MaterialTheme.colorScheme.error
-    }
-    // 枚举 ordinal：HIGH=0/MEDIUM=1/LOW=2；滑条位置左(0)=低 → 位置 = 2 - ordinal
-    val position = (Priority.entries.size - 1 - priority.ordinal).toFloat()
+private fun PrioritySlider(priority: Int, onSelected: (Int) -> Unit) {
+    val color = priorityColor(priority)
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -447,37 +445,58 @@ private fun PrioritySlider(priority: Priority, onSelected: (Priority) -> Unit) {
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "${priority.label}优先级",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                "$priority",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 color = color,
             )
         }
-        Slider(
-            value = position,
-            onValueChange = { raw ->
-                val ordinal = (Priority.entries.size - 1) - raw.roundToInt()
-                val picked = Priority.entries.getOrElse(ordinal) { Priority.MEDIUM }
-                if (picked != priority) onSelected(picked)
-            },
-            valueRange = 0f..(Priority.entries.size - 1).toFloat(),
-            steps = Priority.entries.size - 2,
-            colors = SliderDefaults.colors(
-                thumbColor = color,
-                activeTrackColor = color,
-                inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
-            ),
-        )
-        Row(Modifier.fillMaxWidth()) {
-            Priority.entries.reversed().forEach { p ->
-                Text(
-                    p.label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            // 渐变色带（蓝 → 青/绿/黄/橙 → 红），与 Slider 轨道同高重合
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp),
+            ) {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        colors = (0..100 step 10).map { priorityColor(it) },
+                    ),
+                    cornerRadius = CornerRadius(3.dp.toPx()),
                 )
             }
+            Slider(
+                value = priority.toFloat(),
+                onValueChange = { onSelected(it.roundToInt()) },
+                valueRange = 0f..100f,
+                colors = SliderDefaults.colors(
+                    thumbColor = color,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Text(
+                "低",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+            )
+            Text(
+                "高",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            )
         }
     }
 }

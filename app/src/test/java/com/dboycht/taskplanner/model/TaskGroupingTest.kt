@@ -21,7 +21,7 @@ class TaskGroupingTest {
         due: Long? = null,
         start: Long? = null,
         status: TaskStatus = TaskStatus.TODO,
-        priority: Priority = Priority.MEDIUM,
+        priority: Int = 50,
         title: String = "T$id",
         completedAt: Long? = null,
         updatedAt: Long = 0L,
@@ -99,9 +99,9 @@ class TaskGroupingTest {
     }
 
     @Test
-    fun `TODAY 组同时截止时高优先级在前`() {
-        val low = task(1, due = millisOf(2026, 10, 24, 18, 0), priority = Priority.LOW)
-        val high = task(2, due = millisOf(2026, 10, 24, 18, 0), priority = Priority.HIGH)
+    fun `TODAY 组同时截止时优先级数值大的在前`() {
+        val low = task(1, due = millisOf(2026, 10, 24, 18, 0), priority = 20)
+        val high = task(2, due = millisOf(2026, 10, 24, 18, 0), priority = 90)
         val grouped = TaskGrouper.groupAndSort(listOf(low, high), now, zone)
         assertEquals(listOf(2L, 1L), grouped.getValue(TaskGroup.TODAY).map { it.id })
     }
@@ -115,9 +115,9 @@ class TaskGroupingTest {
     }
 
     @Test
-    fun `NO_DATE 组按优先级排序`() {
-        val low = task(1, priority = Priority.LOW)
-        val high = task(2, priority = Priority.HIGH)
+    fun `NO_DATE 组按优先级数值降序`() {
+        val low = task(1, priority = 10)
+        val high = task(2, priority = 100)
         val grouped = TaskGrouper.groupAndSort(listOf(low, high), now, zone)
         assertEquals(listOf(2L, 1L), grouped.getValue(TaskGroup.NO_DATE).map { it.id })
     }

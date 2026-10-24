@@ -50,17 +50,17 @@ object TaskGrouper {
         TaskGroup.DONE -> list.sortedWith(
             compareByDescending<Task> { it.completedAt ?: it.updatedAt }
         )
-        // 逾期的：最紧急（最早到期）的在前；同级再看优先级、标题。
+        // 逾期的：最紧急（最早到期）的在前；同级优先级数值大者在前。
         TaskGroup.OVERDUE -> list.sortedWith(
-            compareBy({ it.dueTime ?: Long.MAX_VALUE }, { it.priority.ordinal }, { it.title })
+            compareBy<Task> { it.dueTime ?: Long.MAX_VALUE }
+                .thenByDescending { it.priority }
+                .thenBy { it.title }
         )
-        // 其余组：先到期的在前（无截止看开始），同级再看优先级、标题。
+        // 其余组：先到期的在前（无截止看开始），优先级数值大者在前。
         else -> list.sortedWith(
-            compareBy(
-                { it.dueTime ?: it.startTime ?: Long.MAX_VALUE },
-                { it.priority.ordinal },
-                { it.title },
-            )
+            compareBy<Task> { it.dueTime ?: it.startTime ?: Long.MAX_VALUE }
+                .thenByDescending { it.priority }
+                .thenBy { it.title }
         )
     }
 

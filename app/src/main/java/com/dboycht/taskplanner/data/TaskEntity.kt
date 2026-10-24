@@ -2,10 +2,10 @@ package com.dboycht.taskplanner.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.dboycht.taskplanner.model.Priority
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskStatus
+import com.dboycht.taskplanner.model.clampPriority
 
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -24,14 +24,14 @@ data class TaskEntity(
     val completedAt: Long?,
 )
 
-/** 越界 ordinal 一律宽容回退默认值，避免坏行崩溃。 */
+/** 越界 priority / status 一律宽容回退默认值，避免坏行崩溃。 */
 fun TaskEntity.toDomain(): Task = Task(
     id = id,
     title = title,
     description = description,
     startTime = startTime,
     dueTime = dueTime,
-    priority = Priority.entries.getOrElse(priority) { Priority.MEDIUM },
+    priority = clampPriority(priority),
     status = TaskStatus.entries.getOrElse(status) { TaskStatus.TODO },
     tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
     reminderPolicy = ReminderPolicy.decode(reminderPolicy),
@@ -47,7 +47,7 @@ fun Task.toEntity(): TaskEntity = TaskEntity(
     description = description,
     startTime = startTime,
     dueTime = dueTime,
-    priority = priority.ordinal,
+    priority = priority,
     status = status.ordinal,
     tags = tags.joinToString(","),
     reminderPolicy = reminderPolicy.encode(),

@@ -7,12 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dboycht.taskplanner.TaskPlannerApp
-import com.dboycht.taskplanner.model.Priority
+import com.dboycht.taskplanner.model.PRIORITY_DEFAULT
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.ReminderPreset
 import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.TaskValidator
+import com.dboycht.taskplanner.model.clampPriority
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -37,7 +38,7 @@ class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
         val description: String = "",
         val startTime: Long? = null,
         val dueTime: Long? = null,
-        val priority: Priority = Priority.MEDIUM,
+        val priority: Int = PRIORITY_DEFAULT,
         val status: TaskStatus = TaskStatus.TODO,
         val tags: String = "",
         val reminderPolicy: ReminderPolicy = ReminderPolicy.DEFAULT,
@@ -83,7 +84,7 @@ class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateTitle(v: String) { draft = draft.copy(title = v) }
     fun updateDescription(v: String) { draft = draft.copy(description = v) }
-    fun updatePriority(p: Priority) { draft = draft.copy(priority = p) }
+    fun updatePriority(v: Int) { draft = draft.copy(priority = clampPriority(v)) }
     fun updateStatus(s: TaskStatus) { draft = draft.copy(status = s) }
     fun updateTags(v: String) { draft = draft.copy(tags = v) }
     fun setStart(v: Long?) { draft = draft.copy(startTime = v) }
