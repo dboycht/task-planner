@@ -3,6 +3,8 @@ package com.dboycht.taskplanner.ui.edit
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -24,6 +27,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -40,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,6 +59,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,19 +115,7 @@ fun EditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            SectionLabel("优先级")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                Priority.entries.forEachIndexed { index, p ->
-                    SegmentedButton(
-                        selected = draft.priority == p,
-                        onClick = { vm.updatePriority(p) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = Priority.entries.size,
-                        ),
-                    ) { Text(p.label) }
-                }
-            }
+            PrioritySlider(priority = draft.priority, onSelected = vm::updatePriority)
 
             SectionLabel("状态")
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -362,6 +357,21 @@ private fun TimeField(label: String, value: Long?, onSet: (Long?) -> Unit) {
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     TimePicker(state = timePickerState)
+                    // 常用时刻快捷档：点一下直接选定（要精调再用上方滚轮）
+                    QuickTimeChips(
+                        onPick = { hour, minute ->
+                            val dateMillis = pickedDateMillis
+                            if (dateMillis != null) {
+                                val localDate = Instant.ofEpochMilli(dateMillis)
+                                    .atZone(ZoneOffset.UTC).toLocalDate()
+                                val millis = localDate
+                                    .atTime(hour, minute)
+                                    .atZone(zone).toInstant().toEpochMilli()
+                                onSet(millis)
+                            }
+                            showTimePicker = false
+                        },
+                    )
                 }
             },
             confirmButton = {
@@ -384,6 +394,91 @@ private fun TimeField(label: String, value: Long?, onSet: (Long?) -> Unit) {
                 TextButton(onClick = { showTimePicker = false }) { Text("取消") }
             },
         )
+    }
+}
+
+/** 常用时刻快捷档（时:分）。点选即确定，免转滚轮。 */
+private val QUICK_TIMES = listOf(
+    8 to 0, 10 to 0, 12 to 0, 14 to 0, 16 to 0, 18 to 0, 20 to 0, 22 to 0,
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickTimeChips(onPick: (hour: Int, minute: Int) -> Unit) {
+    Column {
+        Text(
+            "常用时刻",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            QUICK_TIMES.forEach { (h, m) ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onPick(h, m) },
+                    label = { Text("%02d:%02d".format(h, m)) },
+                )
+            }
+        }
+    }
+}
+
+/** 优先级滑动条：低（绿）↔ 中（琥珀）↔ 高（红），三档吸附。 */
+@Composable
+private fun PrioritySlider(priority: Priority, onSelected: (Priority) -> Unit) {
+    val color = when (priority) {
+        Priority.LOW -> Color(0xFF43A047)
+        Priority.MEDIUM -> Color(0xFFFB8C00)
+        Priority.HIGH -> MaterialTheme.colorScheme.error
+    }
+    // 枚举 ordinal：HIGH=0/MEDIUM=1/LOW=2；滑条位置左(0)=低 → 位置 = 2 - ordinal
+    val position = (Priority.entries.size - 1 - priority.ordinal).toFloat()
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "优先级",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "${priority.label}优先级",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = color,
+            )
+        }
+        Slider(
+            value = position,
+            onValueChange = { raw ->
+                val ordinal = (Priority.entries.size - 1) - raw.roundToInt()
+                val picked = Priority.entries.getOrElse(ordinal) { Priority.MEDIUM }
+                if (picked != priority) onSelected(picked)
+            },
+            valueRange = 0f..(Priority.entries.size - 1).toFloat(),
+            steps = Priority.entries.size - 2,
+            colors = SliderDefaults.colors(
+                thumbColor = color,
+                activeTrackColor = color,
+                inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
+        )
+        Row(Modifier.fillMaxWidth()) {
+            Priority.entries.reversed().forEach { p ->
+                Text(
+                    p.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+        }
     }
 }
 
