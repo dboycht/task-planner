@@ -13,6 +13,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY dueTime IS NULL, dueTime, priority DESC, title")
     fun observeAll(): Flow<List<TaskEntity>>
 
+    /** 提醒重排用的一次性全量快照（不订阅，避免后台常驻观察者）。 */
+    @Query("SELECT * FROM tasks")
+    suspend fun getAll(): List<TaskEntity>
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun getById(id: Long): TaskEntity?
 

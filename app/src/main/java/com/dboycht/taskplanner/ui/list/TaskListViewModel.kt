@@ -15,9 +15,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 
-class TaskListViewModel(app: Application) : AndroidViewModel(app) {
+class TaskListViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = (app as TaskPlannerApp).repository
+    private val app = application as TaskPlannerApp
+    private val repository = app.repository
 
     /**
      * 分组在每次数据变化时重算（now 取当下）。
@@ -30,10 +31,14 @@ class TaskListViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleDone(task: Task) {
         viewModelScope.launch {
             repository.setDone(task.id, task.status != TaskStatus.DONE)
+            app.syncReminders()
         }
     }
 
     fun delete(task: Task) {
-        viewModelScope.launch { repository.delete(task.id) }
+        viewModelScope.launch {
+            repository.delete(task.id)
+            app.syncReminders()
+        }
     }
 }

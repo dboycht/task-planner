@@ -15,6 +15,9 @@ class TaskRepository(private val dao: TaskDao) {
 
     suspend fun getTask(id: Long): Task? = dao.getById(id)?.toDomain()
 
+    /** 提醒重排用的一次性快照。 */
+    suspend fun allTasks(): List<Task> = dao.getAll().map { it.toDomain() }
+
     /** 新建（id == 0）返回新 id；更新返回原 id。时间戳在此收口。 */
     suspend fun save(task: Task): Long {
         val now = System.currentTimeMillis()

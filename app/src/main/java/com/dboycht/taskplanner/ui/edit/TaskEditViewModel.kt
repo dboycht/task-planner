@@ -23,13 +23,14 @@ import kotlinx.coroutines.launch
  * 新建/编辑草稿。每个编辑目标用独立的 ViewModel 实例（按 taskKey 区分），
  * 避免同一 Activity 复用上一个任务的草稿。
  */
-class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
+class TaskEditViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = (app as TaskPlannerApp).repository
+    private val app = application as TaskPlannerApp
+    private val repository = app.repository
 
     /** 预设列表（供提醒选择 sheet 用；选择时只拷贝策略值）。 */
     val presets: StateFlow<List<ReminderPreset>> =
-        (app as TaskPlannerApp).presetRepository.observePresets()
+        app.presetRepository.observePresets()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     data class Draft(
@@ -120,6 +121,8 @@ class TaskEditViewModel(app: Application) : AndroidViewModel(app) {
                     completedAt = completedAt,
                 )
             )
+            // 时间/策略/状态任一变化都会改变触发时刻 → 全量重排（幂等）。
+            app.syncReminders()
             onSaved()
         }
     }

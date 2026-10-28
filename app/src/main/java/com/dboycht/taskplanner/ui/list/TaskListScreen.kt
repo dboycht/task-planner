@@ -92,7 +92,10 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
         ) { padding ->
             val total = groups.entries.sumOf { it.value.size }
             if (total == 0) {
-                EmptyList(Modifier.padding(padding), animOn)
+                Column(Modifier.fillMaxSize().padding(padding)) {
+                    ReminderPermissionCard()
+                    EmptyList(Modifier.fillMaxSize(), animOn)
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -100,6 +103,7 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
                         .padding(padding),
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
+                    item(key = "reminder-permission") { ReminderPermissionCard() }
                     var appearIndex = 0
                     groups.forEach { (group, tasks) ->
                         if (group == TaskGroup.DONE) {

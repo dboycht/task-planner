@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,8 +48,19 @@ private fun decodeScreen(raw: String): Screen = when {
 }
 
 @Composable
-fun TaskPlannerRoot() {
+fun TaskPlannerRoot(
+    openTaskId: Long? = null,
+    onOpenTaskConsumed: () -> Unit = {},
+) {
     var stackKeys by rememberSaveable { mutableStateOf(listOf(Screen.List.encode())) }
+
+    // 从提醒通知点进来：直接压到「列表 → 该任务编辑页」，返回即回列表。
+    LaunchedEffect(openTaskId) {
+        if (openTaskId != null) {
+            stackKeys = listOf(Screen.List.encode(), Screen.EditTask(openTaskId).encode())
+            onOpenTaskConsumed()
+        }
+    }
 
     fun push(screen: Screen) {
         stackKeys = stackKeys + screen.encode()

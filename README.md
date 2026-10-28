@@ -2,7 +2,7 @@
 
 Android 任务计划应用：添加任务并指定开始时间、截止日期、优先级等，保存后**自动写入系统日历日程**，并按策略**自动挂提醒**（如「截止前 1 小时」），到期通过系统通知提醒。
 
-> 状态：开发中（v1.0.1，未发布）。Kotlin + Jetpack Compose 原生实现。
+> 状态：开发中。Kotlin + Jetpack Compose 原生实现。
 
 ## 功能特性（v1 规划）
 
@@ -29,7 +29,7 @@ gradle assembleDebug   # 或在 Android Studio 中打开
 
 ## 版本
 
-版本号单一来源：`app/build.gradle.kts` 的 `versionName`。当前：**1.0.1（开发中）**。
+版本号单一来源：`app/build.gradle.kts` 的 `versionName`（此处不重复抄写，避免两处漂移）。
 
 ## 许可
 
