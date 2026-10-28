@@ -32,3 +32,6 @@ capture/
 # OS
 .DS_Store
 Thumbs.db
+
+# Release 材料（APK / 正文草稿 / API 响应）：只在开发副本留档，绝不入库
+_release/
