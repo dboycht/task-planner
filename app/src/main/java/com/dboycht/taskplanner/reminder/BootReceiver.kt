@@ -12,6 +12,11 @@ import kotlinx.coroutines.launch
 /**
  * 系统级事件后重排全部提醒：闹钟不跨重启存活，系统清理/改时间/改时区也会丢。
  * 统一走全量对齐（见 ReminderScheduler.sync），不依赖任何簿记状态。
+ *
+ * ⚠️ 实测（ColorOS 16 / Android 16）：`BOOT_COMPLETED` 会被 ROM 延后
+ * （`DEFER_BY_OPLUS`），重启后闹钟通常要等用户打开应用才回来 —— 因此
+ * `Application.onCreate` 里的重排是必备兜底。也试过用 `USER_PRESENT`（解锁）
+ * 来补，实测该隐式广播**根本不会投递**到 manifest receiver，遂不保留。
  */
 class BootReceiver : BroadcastReceiver() {
 
