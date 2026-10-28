@@ -7,7 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
+import com.dboycht.taskplanner.MainActivity
 import com.dboycht.taskplanner.model.Task
+import java.time.ZoneId
 
 /**
  * 自有提醒通道（主通道）：每个任务**最多一条**闹钟，永远指向「下一个尚未到点的提醒」。
@@ -18,6 +21,7 @@ import com.dboycht.taskplanner.model.Task
  */
 object ReminderScheduler {
 
+    private const val TAG = "ReminderScheduler"
     private const val PREFS = "reminder_state"
     private const val KEY_IDS = "scheduled_task_ids"
 
@@ -58,9 +62,20 @@ object ReminderScheduler {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         if (at <= System.currentTimeMillis()) return
         val pi = alarmPendingIntent(context, taskId, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
+        val exact = canScheduleExact(context)
         runCatching {
-            if (canScheduleExact(context)) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            if (exact) {
+                // 用「闹钟」类型而不是 setExactAndAllowWhileIdle：实测 ColorOS 16 会把后者
+                // 加上约 75% 的窗口（59s 后的提醒被放宽到 43s 误差），只有 AlarmClock 才真精确。
+                val showIntent = PendingIntent.getActivity(
+                    context,
+                    (taskId xor (taskId ushr 32)).toInt(),
+                    Intent(context, MainActivity::class.java).apply {
+                        putExtra(MainActivity.EXTRA_TASK_ID, taskId)
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                am.setAlarmClock(AlarmManager.AlarmClockInfo(at, showIntent), pi)
             } else {
                 // 未授权精确闹钟：退化为非精确（省电策略下可能延迟几分钟），不丢提醒。
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
@@ -68,6 +83,7 @@ object ReminderScheduler {
         }.onFailure {
             runCatching { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi) }
         }
+        Log.i(TAG, "schedule task=$taskId at=${formatMoment(at, ZoneId.systemDefault())} exact=$exact")
     }
 
     private fun cancelAlarm(context: Context, taskId: Long) {
