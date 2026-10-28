@@ -49,6 +49,16 @@ fun Task.needsReminder(now: Long): Boolean =
     status != TaskStatus.DONE && reminderPolicy.nextReminder(startTime, dueTime, now) != null
 
 /**
+ * 策略里**所有**触发点都已经过去（且至少有一个点）→ 保存后永远不会响。
+ * 典型场景：截止只剩 30 分钟却选了「截止前 1 小时」。编辑页据此提前给出提示，
+ * 而不是让用户以为设了提醒、到点却什么都没有。
+ */
+fun ReminderPolicy.hasOnlyPastTriggers(startTime: Long?, dueTime: Long?, now: Long): Boolean {
+    val all = dueReminders(startTime, dueTime)
+    return all.isNotEmpty() && all.all { it.triggerAt <= now }
+}
+
+/**
  * 一次全量对齐的计划（纯函数，便于单测）：
  * - [toSchedule]：应当挂闹钟的任务 → 触发时刻（**每次同步都重挂**，靠 PendingIntent 幂等覆盖）；
  * - [toCancel]：之前挂过、现在已经不该挂的任务 id（已完成 / 已删除 / 无未来提醒点）。

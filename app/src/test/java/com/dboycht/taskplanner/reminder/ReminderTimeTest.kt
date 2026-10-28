@@ -120,6 +120,26 @@ class ReminderTimeTest {
         assertTrue(plan.toSchedule.isEmpty())
     }
 
+    // ---------- 提醒点已过（保存后不会响） ----------
+
+    @Test
+    fun `hasOnlyPastTriggers 只在全部点已过时为真`() {
+        val due = 100 * hour
+        val policy = ReminderPolicy.DEFAULT // 截止前 1 小时
+        // 截止还剩 30 分钟 → 唯一的提醒点（前 1 小时）已过
+        assertTrue(policy.hasOnlyPastTriggers(null, due, now = due - 30 * 60_000L))
+        // 截止还剩 3 小时 → 提醒点仍在未来
+        assertFalse(policy.hasOnlyPastTriggers(null, due, now = due - 3 * hour))
+        // 空策略（不提醒）不算「已过」，避免误报
+        assertFalse(ReminderPolicy(emptyList()).hasOnlyPastTriggers(null, due, now = due))
+        // 锚点时间缺失 → 没有任何点，不提示
+        assertFalse(policy.hasOnlyPastTriggers(null, null, now = due))
+        // 双锚点：只要还有一个未来点就不提示
+        val both = policy(ReminderPoint(ReminderAnchor.START, 0), ReminderPoint(ReminderAnchor.DUE, 60))
+        assertFalse(both.hasOnlyPastTriggers(due - hour, due, now = due - 2 * hour))
+        assertTrue(both.hasOnlyPastTriggers(due - hour, due, now = due - 10 * 60_000L))
+    }
+
     // ---------- 通知文案 ----------
 
     @Test

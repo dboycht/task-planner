@@ -68,6 +68,7 @@ import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.isUsableFor
 import com.dboycht.taskplanner.model.missingAnchorLabel
 import com.dboycht.taskplanner.model.summary
+import com.dboycht.taskplanner.reminder.hasOnlyPastTriggers
 import com.dboycht.taskplanner.ui.anim.Appear
 import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 import com.dboycht.taskplanner.ui.theme.priorityColor
@@ -196,6 +197,19 @@ fun EditScreen(
                             draft.reminderPolicy.summary(),
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                        // 提醒点全部已过 = 保存后永远不响；这里是唯一能提前告知的位置。
+                        if (draft.reminderPolicy.hasOnlyPastTriggers(
+                                draft.startTime,
+                                draft.dueTime,
+                                System.currentTimeMillis(),
+                            )
+                        ) {
+                            Text(
+                                "所选提醒时间已过，保存后不会响",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                     Text(
                         "选择 ›",
