@@ -20,8 +20,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * 新建/编辑草稿。每个编辑目标用独立的 ViewModel 实例（按 taskKey 区分），
- * 避免同一 Activity 复用上一个任务的草稿。
+ * 新建/编辑草稿。每次「进入编辑页」由导航分配独立 ViewModel 实例（key 含 visitId），
+ * 且 [load] 在目标变化时重置草稿 —— 两道保险都不会把上一个任务的内容带进新页面。
  */
 class TaskEditViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -51,20 +51,30 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
     var draft by mutableStateOf(Draft())
         private set
 
+    /** 已加载的「进入编号」（visitId，见 NavStack.kt 的 Screen）；null = 还没加载过。 */
+    private var loadedVisit: Long? = null
+
     val error: String?
         get() = TaskValidator.validate(draft.title, draft.startTime, draft.dueTime)
 
-    fun load(taskId: Long?) {
-        if (draft.loaded) return
-        if (taskId == null) {
-            draft = draft.copy(loaded = true)
-            return
-        }
+    /**
+     * 加载指定任务；[taskId] 为 null 表示新建。
+     *
+     * [visitId] 相同 = 同一次进入（转屏、从预设页返回等重组），保留现场草稿；
+     * [visitId] 不同 = 又点了一次「新建 / 编辑」，必须丢掉旧草稿重新来。
+     * 这是 2026-10-29「新建任务自动填充了刚建好的任务」那个 bug 的修复点。
+     */
+    fun load(taskId: Long?, visitId: Long) {
+        if (loadedVisit == visitId) return
+        loadedVisit = visitId
+        // 先回到干净草稿：load 期间 loaded=false，保存按钮不可点。
+        draft = Draft(loaded = taskId == null)
+        if (taskId == null) return
         viewModelScope.launch {
             val task = repository.getTask(taskId)
             if (task == null) {
                 // 任务已不存在（如别处被删）→ 退化为新建态，而不是白屏。
-                draft = draft.copy(loaded = true)
+                draft = Draft(loaded = true)
                 return@launch
             }
             draft = Draft(

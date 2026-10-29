@@ -25,6 +25,9 @@ class PresetEditViewModel(app: Application) : AndroidViewModel(app) {
     var draft by mutableStateOf(Draft())
         private set
 
+    /** 已加载的「进入编号」（visitId，见 NavStack.kt 的 Screen）；null = 还没加载过。 */
+    private var loadedVisit: Long? = null
+
     /** 校验：名称非空且至少一个提醒点。 */
     val error: String?
         get() = when {
@@ -33,17 +36,17 @@ class PresetEditViewModel(app: Application) : AndroidViewModel(app) {
             else -> null
         }
 
-    fun load(presetId: Long?) {
-        if (draft.loaded) return
-        if (presetId == null) {
-            draft = draft.copy(loaded = true)
-            return
-        }
+    /** 与任务编辑页同理：换了一次进入编号就丢掉旧草稿，绝不把上一个预设带进新建页。 */
+    fun load(presetId: Long?, visitId: Long) {
+        if (loadedVisit == visitId) return
+        loadedVisit = visitId
+        draft = Draft(loaded = presetId == null)
+        if (presetId == null) return
         viewModelScope.launch {
             val preset = repository.getPreset(presetId)
             if (preset == null || preset.isBuiltIn) {
                 // 内置预设不可编辑 / 已不存在 → 按新建处理。
-                draft = draft.copy(loaded = true)
+                draft = Draft(loaded = true)
                 return@launch
             }
             draft = Draft(

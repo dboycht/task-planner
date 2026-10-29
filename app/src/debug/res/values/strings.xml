@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  仅 debug 变体生效：覆盖 main 的 app_name。
+  debug 包的 applicationId 带 `.debug` 后缀，可与正式包同时安装；
+  若两者同名同图标，桌面上会出现两个一模一样的「任务计划」（用户 2026-10-29 提问）。
+  这里让调试包在名称上自证身份，避免再次混淆。
+-->
+<resources>
+    <string name="app_name">任务计划·调试</string>
+</resources>

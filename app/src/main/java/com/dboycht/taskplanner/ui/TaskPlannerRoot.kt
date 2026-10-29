@@ -21,32 +21,6 @@ import com.dboycht.taskplanner.ui.list.TaskListScreen
 import com.dboycht.taskplanner.ui.preset.PresetEditScreen
 import com.dboycht.taskplanner.ui.preset.PresetListScreen
 
-/** 页面栈（状态导航，不引 navigation-compose；M2 设置页加入时再评估）。 */
-sealed interface Screen {
-    data object List : Screen
-    data class EditTask(val taskId: Long?) : Screen
-    data object Presets : Screen
-    data class EditPreset(val presetId: Long?) : Screen
-}
-
-/** 编码成 Bundle 兼容的字符串以支持 rememberSaveable（进程重建不丢栈）。 */
-private fun Screen.encode(): String = when (this) {
-    is Screen.List -> "list"
-    is Screen.EditTask -> "task:${taskId ?: "new"}"
-    is Screen.Presets -> "presets"
-    is Screen.EditPreset -> "preset:${presetId ?: "new"}"
-}
-
-private fun decodeScreen(raw: String): Screen = when {
-    raw == "list" -> Screen.List
-    raw == "presets" -> Screen.Presets
-    raw.startsWith("task:") ->
-        Screen.EditTask(raw.removePrefix("task:").toLongOrNull())
-    raw.startsWith("preset:") ->
-        Screen.EditPreset(raw.removePrefix("preset:").toLongOrNull())
-    else -> Screen.List
-}
-
 @Composable
 fun TaskPlannerRoot(
     openTaskId: Long? = null,
@@ -54,16 +28,27 @@ fun TaskPlannerRoot(
 ) {
     var stackKeys by rememberSaveable { mutableStateOf(listOf(Screen.List.encode())) }
 
+    // 每次「进入」编辑页都取一个新号；同一 targetId 的多次访问因此拿到不同的 VM key。
+    // 计数器随页面栈一起进 saveable，进程重建后继续递增，不会与旧 key 撞车。
+    var visitSeq by rememberSaveable { mutableStateOf(1L) }
+
+    fun pushTask(taskId: Long?) {
+        stackKeys = stackKeys + Screen.EditTask(taskId, visitSeq).encode()
+        visitSeq += 1
+    }
+
+    fun pushPreset(presetId: Long?) {
+        stackKeys = stackKeys + Screen.EditPreset(presetId, visitSeq).encode()
+        visitSeq += 1
+    }
+
     // 从提醒通知点进来：直接压到「列表 → 该任务编辑页」，返回即回列表。
     LaunchedEffect(openTaskId) {
         if (openTaskId != null) {
-            stackKeys = listOf(Screen.List.encode(), Screen.EditTask(openTaskId).encode())
+            stackKeys = listOf(Screen.List.encode())
+            pushTask(openTaskId)
             onOpenTaskConsumed()
         }
-    }
-
-    fun push(screen: Screen) {
-        stackKeys = stackKeys + screen.encode()
     }
 
     fun back() {
@@ -103,19 +88,23 @@ fun TaskPlannerRoot(
     ) { keys ->
         when (val current = decodeScreen(keys.last())) {
             is Screen.List -> TaskListScreen(
-                onEdit = { id -> push(Screen.EditTask(id)) },
+                onEdit = { id -> pushTask(id) },
             )
             is Screen.EditTask -> EditScreen(
-                taskKey = current.taskId?.toString() ?: "new",
+                taskId = current.taskId,
+                visitId = current.visitId,
                 onBack = ::back,
-                onOpenPresets = { push(Screen.Presets) },
+                onOpenPresets = {
+                    stackKeys = stackKeys + Screen.Presets.encode()
+                },
             )
             is Screen.Presets -> PresetListScreen(
                 onBack = ::back,
-                onEdit = { id -> push(Screen.EditPreset(id)) },
+                onEdit = { id -> pushPreset(id) },
             )
             is Screen.EditPreset -> PresetEditScreen(
-                presetKey = current.presetId?.toString() ?: "new",
+                presetId = current.presetId,
+                visitId = current.visitId,
                 onBack = ::back,
             )
         }

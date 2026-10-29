@@ -48,11 +48,13 @@ private val CUSTOM_TAG = -1
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PresetEditScreen(
-    presetKey: String,
+    presetId: Long?,
+    /** 本次进入的编号（同一次进入在转屏/重组时保持不变）。 */
+    visitId: Long,
     onBack: () -> Unit,
 ) {
-    val vm: PresetEditViewModel = viewModel(key = "preset-edit-$presetKey")
-    LaunchedEffect(presetKey) { vm.load(presetKey.toLongOrNull()) }
+    val vm: PresetEditViewModel = viewModel(key = "preset-edit-${presetId ?: "new"}")
+    LaunchedEffect(presetId, visitId) { vm.load(presetId, visitId) }
     val draft = vm.draft
     val isNew = draft.id == 0L
     val error = vm.error

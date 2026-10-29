@@ -82,12 +82,16 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditScreen(
-    taskKey: String,
+    taskId: Long?,
+    /** 本次进入的编号（同一次进入在转屏/重组时保持不变）。 */
+    visitId: Long,
     onBack: () -> Unit,
     onOpenPresets: () -> Unit,
 ) {
-    val vm: TaskEditViewModel = viewModel(key = "edit-$taskKey")
-    LaunchedEffect(taskKey) { vm.load(taskKey.toLongOrNull()) }
+    // key 只按目标区分（不掺 visitId）：否则每进一次编辑页就在 Activity 的
+    // ViewModelStore 里堆一个永不回收的实例。是否重置草稿交给 load 按 visitId 判断。
+    val vm: TaskEditViewModel = viewModel(key = "edit-${taskId ?: "new"}")
+    LaunchedEffect(taskId, visitId) { vm.load(taskId, visitId) }
     val draft = vm.draft
     val presets by vm.presets.collectAsStateWithLifecycle()
     val isNew = draft.id == 0L
