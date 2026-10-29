@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,8 @@ import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.model.TaskGroup
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.priorityLabel
+import com.dboycht.taskplanner.ui.about.AboutDialog
+import com.dboycht.taskplanner.ui.about.appDisplayName
 import com.dboycht.taskplanner.ui.anim.Appear
 import com.dboycht.taskplanner.ui.anim.EASE
 import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
@@ -79,11 +82,22 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
     var deleteTarget by remember { mutableStateOf<Task?>(null) }
     var doneExpanded by rememberSaveable { mutableStateOf(false) }
     var celebrationTrigger by remember { mutableStateOf(0) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
     val animOn = rememberAnimationsEnabled()
+    // 标题取应用自身的 label（与桌面图标同名），测试版因此也显示「任务计划·测试版」。
+    val context = LocalContext.current
+    val appLabel = remember(context) { appDisplayName(context) }
 
     Box {
         Scaffold(
-            topBar = { TopAppBar(title = { Text("任务计划") }) },
+            topBar = {
+                TopAppBar(
+                    title = { Text(appLabel) },
+                    actions = {
+                        TextButton(onClick = { showAbout = true }) { Text("关于") }
+                    },
+                )
+            },
             floatingActionButton = {
                 FloatingActionButton(onClick = { onEdit(null) }) {
                     Text("＋", style = MaterialTheme.typography.titleLarge)
@@ -194,6 +208,8 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
             },
         )
     }
+
+    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 }
 
 @Composable
