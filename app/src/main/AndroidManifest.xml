@@ -15,10 +15,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TaskPlanner">
 
+        <!-- screenOrientation=portrait：用户要求「只竖屏」。整页都是竖排表单/列表，横屏没有额外价值，
+             且横屏会把时间选择器/底部 sheet 挤成半屏。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
