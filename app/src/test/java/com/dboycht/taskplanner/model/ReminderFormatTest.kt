@@ -23,8 +23,22 @@ class ReminderFormatTest {
     @Test
     fun `不能整除保留分钟`() {
         assertEquals("30 分钟", formatOffsetMinutes(30))
-        assertEquals("90 分钟", formatOffsetMinutes(90))
         assertEquals("25 分钟", formatOffsetMinutes(25))
+    }
+
+    @Test
+    fun `跨单位的提前量按天小时分钟拆分显示`() {
+        // 2026-11-02 起由「90 分钟」改为拆分，便于核对自定义组合输入。
+        assertEquals("1 小时 30 分钟", formatOffsetMinutes(90))
+        assertEquals("1 天 2 小时 30 分钟", formatOffsetMinutes(1590))
+        assertEquals("1 天 30 分钟", formatOffsetMinutes(1470))
+        assertEquals("1 天 1 小时", formatOffsetMinutes(1500))
+    }
+
+    @Test
+    fun `零与负值文案不崩`() {
+        assertEquals("0 分钟", formatOffsetMinutes(0))
+        assertEquals("0 分钟", formatOffsetMinutes(-5))
     }
 
     // ---------- summary ----------

@@ -35,9 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.dboycht.taskplanner.model.CustomOffsetInput
+import com.dboycht.taskplanner.model.MAX_CUSTOM_OFFSET_MINUTES
 import com.dboycht.taskplanner.model.ReminderAnchor
 import com.dboycht.taskplanner.model.ReminderPoint
 import com.dboycht.taskplanner.model.formatOffsetMinutes
+import com.dboycht.taskplanner.model.suggestedOffsetMinutes
 import com.dboycht.taskplanner.ui.anim.Appear
 import com.dboycht.taskplanner.ui.anim.rememberAnimationsEnabled
 
@@ -152,6 +155,7 @@ fun PresetEditScreen(
 
     if (showAddDialog) {
         AddPointDialog(
+            existingPoints = draft.points,
             onConfirm = {
                 vm.addPoint(it)
                 showAddDialog = false
@@ -178,18 +182,24 @@ fun PresetEditScreen(
     }
 }
 
-/** 添加提醒点：锚点（开始/截止）+ 提前量（快捷档或自定义分钟）。 */
+/** 添加提醒点：锚点（开始/截止）+ 提前量（快捷档或自定义「天 / 小时 / 分钟」组合）。 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddPointDialog(
+    existingPoints: List<ReminderPoint>,
     onConfirm: (ReminderPoint) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var anchor by remember { mutableStateOf(ReminderAnchor.DUE) }
-    var offsetMinutes by remember { mutableIntStateOf(60) }
-    var customText by remember { mutableStateOf("") }
+    // 初值跟着锚点走：同锚点已有提醒点时取「最大提前量 + 1 小时」，免得连加时撞上重复点被静默忽略。
+    var offsetMinutes by remember { mutableIntStateOf(suggestedOffsetMinutes(existingPoints, anchor)) }
+    // 用户自己选过快捷档 / 自定义之后就锁定，不再被锚点切换覆盖掉。
+    var offsetTouched by remember { mutableStateOf(false) }
+    // 自定义用三个输入框组合（1 天 2 小时 30 分钟 = 1590 分钟），而不是只能填分钟。
+    var custom by remember { mutableStateOf(CustomOffsetInput("", "", "")) }
     val customSelected = offsetMinutes == CUSTOM_TAG
-    val customValue = customText.toIntOrNull()
+    val customValue = custom.toOffsetMinutes()
+    val customInvalid = customSelected && !custom.isBlank && customValue == null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -200,7 +210,7 @@ private fun AddPointDialog(
                     ReminderAnchor.entries.forEachIndexed { index, a ->
                         SegmentedButton(
                             selected = anchor == a,
-                            onClick = { anchor = a },
+                            onClick = { anchor = a; if (!offsetTouched) offsetMinutes = suggestedOffsetMinutes(existingPoints, a) },
                             shape = SegmentedButtonDefaults.itemShape(
                                 index = index,
                                 count = ReminderAnchor.entries.size,
@@ -214,7 +224,7 @@ private fun AddPointDialog(
                     QUICK_OFFSETS.forEach { minutes ->
                         FilterChip(
                             selected = offsetMinutes == minutes,
-                            onClick = { offsetMinutes = minutes },
+                            onClick = { offsetMinutes = minutes; offsetTouched = true },
                             label = {
                                 Text(
                                     if (minutes == 0) "到点" else formatOffsetMinutes(minutes)
@@ -226,18 +236,49 @@ private fun AddPointDialog(
                         selected = customSelected,
                         onClick = {
                             offsetMinutes = CUSTOM_TAG
+                            offsetTouched = true
                         },
                         label = { Text("自定义") },
                     )
                 }
                 if (customSelected) {
-                    OutlinedTextField(
-                        value = customText,
-                        onValueChange = { customText = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("提前多少分钟") },
-                        singleLine = true,
-                        isError = customSelected && customValue == null,
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CustomOffsetField(
+                            value = custom.days,
+                            onValueChange = { custom = custom.copy(days = it) },
+                            label = "天",
+                            modifier = Modifier.weight(1f),
+                        )
+                        CustomOffsetField(
+                            value = custom.hours,
+                            onValueChange = { custom = custom.copy(hours = it) },
+                            label = "小时",
+                            modifier = Modifier.weight(1f),
+                        )
+                        CustomOffsetField(
+                            value = custom.minutes,
+                            onValueChange = { custom = custom.copy(minutes = it) },
+                            label = "分钟",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Text(
+                        when {
+                            customInvalid -> "提前量不能超过 ${formatOffsetMinutes(MAX_CUSTOM_OFFSET_MINUTES)}"
+                            custom.isBlank -> "可只填其中一栏，如「2 小时」；留空按到点算"
+                            customValue == 0 -> "合计 0 分钟 = 到点提醒"
+                            customValue != null -> "合计提前 ${formatOffsetMinutes(customValue)}"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (customInvalid) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                 }
             }
@@ -250,12 +291,30 @@ private fun AddPointDialog(
                         onConfirm(ReminderPoint(anchor, minutes))
                     }
                 },
-                enabled = !customSelected || (customValue != null && customValue >= 0),
+                enabled = if (customSelected) customValue != null && !custom.isBlank else true,
             ) { Text("添加") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
         },
+    )
+}
+
+/** 自定义提前量的单个数字输入框：只收数字，长度上限 7 位（上限量级已足够，且挡住长串卡顿）。 */
+@Composable
+private fun CustomOffsetField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { raw -> onValueChange(raw.filter { ch -> ch.isDigit() }.take(7)) },
+        label = { Text(label) },
+        singleLine = true,
+        placeholder = { Text("0") },
+        modifier = modifier,
     )
 }
 

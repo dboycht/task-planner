@@ -51,13 +51,62 @@ val BUILT_IN_PRESETS: List<ReminderPreset> = listOf(
 )
 
 /**
- * 提前量的展示文案：能被天/小时整除的用大单位（1440→“1 天”、60→“1 小时”），
- * 其余保留分钟（90→“90 分钟”）。0 分钟由调用方特判为“到点提醒”。
+ * 提前量的展示文案，按大单位优先**拆分**：1440→“1 天”、60→“1 小时”、90→“1 小时 30 分钟”、
+ * 1590→“1 天 2 小时 30 分钟”。整小时/整天/整分钟沿用单段写法（老文案不变）。
+ * 注：早期版本对 90 输出“90 分钟”，2026-11-02 起改为拆分显示，便于核对自定义组合输入。
  */
-fun formatOffsetMinutes(minutes: Int): String = when {
-    minutes % 1440 == 0 -> "${minutes / 1440} 天"
-    minutes % 60 == 0 -> "${minutes / 60} 小时"
-    else -> "$minutes 分钟"
+fun formatOffsetMinutes(minutes: Int): String {
+    if (minutes <= 0) return "0 分钟"
+    val d = minutes / 1440
+    val h = minutes % 1440 / 60
+    val m = minutes % 60
+    val parts = buildList {
+        if (d > 0) add("$d 天")
+        if (h > 0) add("$h 小时")
+        if (m > 0) add("$m 分钟")
+    }
+    return parts.joinToString(" ")
+}
+
+/**
+ * 自定义提前量输入上限。单点上限约 3 年，远超任何日历提醒的实际用途；
+ * 上限存在的意义是**挡住 Int 溢出**（天×1440 + 小时×60 + 分钟 一旦溢出成负数，
+ * 提醒会被调度层当成「过去的点」静默丢掉）。
+ */
+const val MAX_CUSTOM_OFFSET_MINUTES: Int = 1_000_000
+
+/**
+ * 自定义提前量输入（天 / 小时 / 分钟三个输入框的原始文本）。
+ * 只认纯数字串：空串、`abc`、`-5`、`1.5` 一律按 0 计（UI 已过滤，纯函数仍需自防）。
+ */
+data class CustomOffsetInput(val days: String, val hours: String, val minutes: String) {
+
+    /** 三段各自的整数值；非纯数字一律 0。 */
+    val parts: List<Int>
+        get() = listOf(days, hours, minutes).map { raw ->
+            if (raw.isNotEmpty() && raw.all { it.isDigit() }) raw.toIntOrNull() ?: 0 else 0
+        }
+
+    /** 全空 ⇒ 还没填（与「填了 0」区分，用于决定是否显示错误）。 */
+    val isBlank: Boolean get() = days.isEmpty() && hours.isEmpty() && minutes.isEmpty()
+
+    /** 合计分钟数；任意一段超过 [MAX_CUSTOM_OFFSET_MINUTES]，或合计超出上限时为 null。 */
+    fun toOffsetMinutes(): Int? {
+        val (d, h, m) = parts
+        if (parts.any { it > MAX_CUSTOM_OFFSET_MINUTES }) return null
+        val total = d.toLong() * 1440L + h.toLong() * 60L + m.toLong()
+        return if (total > MAX_CUSTOM_OFFSET_MINUTES) null else total.toInt()
+    }
+}
+
+/**
+ * 把现有策略里「某锚点下最大提前量 + 1 小时」作为新提醒点的初值，避免连续添加时
+ * 每次都从默认 1 小时开始、撞上「重复提醒点」（[ReminderPoint] 去重会静默忽略）。
+ * 空策略返回 60。
+ */
+fun suggestedOffsetMinutes(existing: List<ReminderPoint>, anchor: ReminderAnchor): Int {
+    val max = existing.filter { it.anchor == anchor }.maxOfOrNull { it.offsetMinutes } ?: return 60
+    return (max + 60).coerceAtMost(MAX_CUSTOM_OFFSET_MINUTES)
 }
 
 /** 策略的人话摘要（空策略 =「不提醒」）。列表、编辑页、预设页共用。 */
