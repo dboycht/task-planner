@@ -31,14 +31,16 @@ class TaskListViewModel(application: Application) : AndroidViewModel(application
     fun toggleDone(task: Task) {
         viewModelScope.launch {
             repository.setDone(task.id, task.status != TaskStatus.DONE)
-            app.syncReminders()
+            // 重复任务勾完成会补出下一次；日历投影也要跟进 ✓ 前缀 → 走全量维护。
+            app.maintenanceSync()
         }
     }
 
-    fun delete(task: Task) {
+    /** 删除：重复任务可选「仅此次」或「整个系列」；删除前快照交给日历层清理事件。 */
+    fun delete(task: Task, deleteSeries: Boolean = false) {
         viewModelScope.launch {
-            repository.delete(task.id)
-            app.syncReminders()
+            val removed = repository.delete(task.id, deleteSeries)
+            app.maintenanceSync(removed)
         }
     }
 }

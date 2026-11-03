@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TaskEntity::class, ReminderPresetEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,6 +39,14 @@ abstract class AppDatabase : RoomDatabase() {
                     "UPDATE tasks SET priority = CASE priority " +
                         "WHEN 0 THEN 100 WHEN 1 THEN 50 WHEN 2 THEN 0 ELSE priority END"
                 )
+            }
+        }
+
+        /** v3→v4：tasks 新增重复任务两列（recurRule / recurGroup），存量行均为 NULL = 不重复。 */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN recurRule TEXT")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN recurGroup TEXT")
             }
         }
     }

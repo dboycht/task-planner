@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dboycht.taskplanner.TaskPlannerApp
 import com.dboycht.taskplanner.model.PRIORITY_DEFAULT
+import com.dboycht.taskplanner.model.RecurrenceRule
 import com.dboycht.taskplanner.model.ReminderPolicy
 import com.dboycht.taskplanner.model.ReminderPreset
 import com.dboycht.taskplanner.model.Task
@@ -43,6 +44,9 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
         val status: TaskStatus = TaskStatus.TODO,
         val tags: String = "",
         val reminderPolicy: ReminderPolicy = ReminderPolicy.DEFAULT,
+        val recurRule: RecurrenceRule = RecurrenceRule.NONE,
+        /** 编辑已有任务时保留其系列标识（重复实例间不换组）；新建为 null。 */
+        val recurGroup: String? = null,
         val completedAt: Long? = null,
         /** false = 尚未从库加载完（新建任务立即置 true）。防止加载期间误存。 */
         val loaded: Boolean = false,
@@ -55,7 +59,7 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
     private var loadedVisit: Long? = null
 
     val error: String?
-        get() = TaskValidator.validate(draft.title, draft.startTime, draft.dueTime)
+        get() = TaskValidator.validate(draft.title, draft.startTime, draft.dueTime, draft.recurRule)
 
     /**
      * 加载指定任务；[taskId] 为 null 表示新建。
@@ -87,6 +91,8 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
                 status = task.status,
                 tags = task.tags.joinToString(","),
                 reminderPolicy = task.reminderPolicy,
+                recurRule = task.recurRule,
+                recurGroup = task.recurGroup,
                 completedAt = task.completedAt,
                 loaded = true,
             )
@@ -98,6 +104,7 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
     fun updatePriority(v: Int) { draft = draft.copy(priority = clampPriority(v)) }
     fun updateStatus(s: TaskStatus) { draft = draft.copy(status = s) }
     fun updateTags(v: String) { draft = draft.copy(tags = v) }
+    fun updateRecurRule(r: RecurrenceRule) { draft = draft.copy(recurRule = r) }
     fun setStart(v: Long?) { draft = draft.copy(startTime = v) }
     fun setDue(v: Long?) { draft = draft.copy(dueTime = v) }
 
@@ -128,11 +135,14 @@ class TaskEditViewModel(application: Application) : AndroidViewModel(application
                     status = d.status,
                     tags = d.tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
                     reminderPolicy = d.reminderPolicy,
+                    recurRule = d.recurRule,
+                    recurGroup = d.recurGroup,
                     completedAt = completedAt,
                 )
             )
-            // 时间/策略/状态任一变化都会改变触发时刻 → 全量重排（幂等）。
-            app.syncReminders()
+            // 时间/策略/状态任一变化都会改变触发时刻；重复任务可能补出下一次；
+            // 日历事件随之增/改 → 走全量维护（幂等）。
+            app.maintenanceSync()
             onSaved()
         }
     }

@@ -90,6 +90,9 @@ data class Task(
     val status: TaskStatus = TaskStatus.TODO,
     val tags: List<String> = emptyList(),
     val reminderPolicy: ReminderPolicy = ReminderPolicy.DEFAULT,
+    val recurRule: RecurrenceRule = RecurrenceRule.NONE,
+    /** 重复系列标识（同一系列的实例共享；非重复任务为 null）。 */
+    val recurGroup: String? = null,
     val calendarEventId: Long? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
@@ -98,10 +101,19 @@ data class Task(
 
 /** 保存前校验。返回可直接展示的中文错误信息；合法返回 null。 */
 object TaskValidator {
-    fun validate(title: String, startTime: Long?, dueTime: Long?): String? {
+    fun validate(
+        title: String,
+        startTime: Long?,
+        dueTime: Long?,
+        recurRule: RecurrenceRule = RecurrenceRule.NONE,
+    ): String? {
         if (title.isBlank()) return "标题不能为空"
         if (startTime != null && dueTime != null && dueTime < startTime) {
             return "截止时间不能早于开始时间"
+        }
+        // 重复推算完全依赖截止时间；没有截止就无法生成下一次。
+        if (recurRule.isRecurring && dueTime == null) {
+            return "重复任务需要先设置截止时间"
         }
         return null
     }

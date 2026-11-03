@@ -20,6 +20,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun getById(id: Long): TaskEntity?
 
+    /** 重复系列的全部实例（删除系列 / 防僵尸生成用）。 */
+    @Query("SELECT * FROM tasks WHERE recurGroup = :group")
+    suspend fun getByGroup(group: String): List<TaskEntity>
+
     @Insert
     suspend fun insert(entity: TaskEntity): Long
 
@@ -28,4 +32,15 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM tasks WHERE recurGroup = :group")
+    suspend fun deleteByGroup(group: String)
+
+    /** 系列止步：清掉组内所有行的重复规则（种子实例被删后防僵尸再生成）。 */
+    @Query("UPDATE tasks SET recurRule = '' WHERE recurGroup = :group")
+    suspend fun clearRuleByGroup(group: String)
+
+    /** 日历投影映射回写（null = 无事件/已清理）。 */
+    @Query("UPDATE tasks SET calendarEventId = :eventId WHERE id = :id")
+    suspend fun setCalendarEventId(id: Long, eventId: Long?)
 }

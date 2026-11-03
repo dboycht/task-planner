@@ -40,8 +40,8 @@ class ReminderReceiver : BroadcastReceiver() {
                         }
                     }
                 }
-                // 无论走哪条分支都对齐一次：顺带排下一个提醒点、清掉不该留的闹钟。
-                app.syncRemindersNow()
+                // 无论走哪条分支都对齐一次：顺带排下一个提醒点、补重复实例、清掉不该留的闹钟。
+                app.maintenanceSyncNow()
             } finally {
                 pending.finish()
             }
