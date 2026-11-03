@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
  * 从系统设置回来（ON_RESUME）重新检查，授权后横幅自动切换/消失。
  */
 @Composable
-fun CalendarPermissionCard(uncompletedCount: Int = 0) {
+fun CalendarPermissionCard(unsyncedCount: Int = 0) {
     val context = LocalContext.current
     val app = context.applicationContext as TaskPlannerApp
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -96,11 +96,11 @@ fun CalendarPermissionCard(uncompletedCount: Int = 0) {
             }
         }
 
-        granted && !backfillDone && !backfillDismissed && uncompletedCount > 0 -> {
+        granted && !backfillDone && !backfillDismissed && unsyncedCount > 0 -> {
             BannerCard {
                 Text("📅 把现有任务同步进日历？", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "检测到 $uncompletedCount 条未完成任务还没有日历日程。同步后可在系统日历里看到它们；任务在应用内的增删改会自动跟着日历走。",
+                    "检测到 $unsyncedCount 条未完成任务还没有日历日程。同步后可在系统日历里看到它们；任务在应用内的增删改会自动跟着日历走。",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -119,7 +119,7 @@ fun CalendarPermissionCard(uncompletedCount: Int = 0) {
                             app.maintenanceSyncNow() // 先确保专属日历就位
                             CalendarSyncManager.backfillUncompleted(context, app.repository.allTasks())
                         }
-                    }) { Text("同步 $uncompletedCount 条") }
+                    }) { Text("同步 $unsyncedCount 条") }
                 }
             }
         }

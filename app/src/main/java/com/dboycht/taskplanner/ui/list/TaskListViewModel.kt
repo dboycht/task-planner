@@ -45,9 +45,18 @@ class TaskListViewModel(application: Application) : AndroidViewModel(application
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    /** 未完成任务数（日历回填横幅用，不受筛选影响）。 */
+    /** 未完成任务数（不受筛选影响）。 */
     val uncompletedCount: StateFlow<Int> = repository.observeTasks()
         .map { tasks -> tasks.count { it.status != TaskStatus.DONE } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** 还没有日历事件的未完成任务数（日历回填横幅口径：真「没同步过」的才计数）。 */
+    val unsyncedCount: StateFlow<Int> = repository.observeTasks()
+        .map { tasks ->
+            tasks.count {
+                it.status != TaskStatus.DONE && it.dueTime != null && it.calendarEventId == null
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun setFilter(f: TaskFilter) { filter.value = f }

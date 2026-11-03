@@ -266,6 +266,13 @@ object CalendarSyncManager {
                 put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
             }
             runCatching { context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, values) }
+                .onSuccess { uri ->
+                    if (uri == null) {
+                        Log.w(TAG, "insert reminder returned null (minutes=$minutes eventId=$eventId)")
+                    } else {
+                        Log.i(TAG, "insert reminder ok (minutes=$minutes eventId=$eventId)")
+                    }
+                }
                 .onFailure { Log.w(TAG, "insert reminder failed (minutes=$minutes)", it) }
         }
     }
@@ -290,7 +297,15 @@ object CalendarSyncManager {
             null,
         )?.use { c ->
             if (c.moveToFirst()) {
-                c.getString(0)?.split(',')?.any { it.trim() == "METHOD_ALERT" } ?: true
+                val raw = c.getString(0)
+                // 该列存的是**方法数字码**（如 "0,1" = DEFAULT,ALERT），不是 "METHOD_*" 名字。
+                // 空串/NULL/解析不了都按「允许」处理（AOSP 默认支持 ALERT）。
+                raw.isNullOrBlank() ||
+                    raw.split(',').mapNotNull { it.trim().toIntOrNull() }.let { codes ->
+                        codes.isEmpty() ||
+                            codes.contains(CalendarContract.Reminders.METHOD_DEFAULT) ||
+                            codes.contains(CalendarContract.Reminders.METHOD_ALERT)
+                    }
             } else true
         } ?: true
     }.getOrDefault(true)

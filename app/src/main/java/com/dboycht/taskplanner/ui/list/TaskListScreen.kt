@@ -101,6 +101,7 @@ fun TaskListScreen(
     val allTags by vm.allTags.collectAsStateWithLifecycle()
     val totalCount by vm.totalCount.collectAsStateWithLifecycle()
     val uncompletedCount by vm.uncompletedCount.collectAsStateWithLifecycle()
+    val unsyncedCount by vm.unsyncedCount.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<Task?>(null) }
     var doneExpanded by rememberSaveable { mutableStateOf(false) }
     var celebrationTrigger by remember { mutableStateOf(0) }
@@ -108,6 +109,12 @@ fun TaskListScreen(
     var searching by rememberSaveable { mutableStateOf(false) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     val animOn = rememberAnimationsEnabled()
+
+    // 搜索框关闭（X / 推入其他页面 / 返回）即清空查询：
+    // 否则查询残留成「隐藏的过滤条件」，列表看着凭空少任务（模拟器自验发现的缺陷）。
+    LaunchedEffect(searching) {
+        if (!searching && filter.query.isNotEmpty()) vm.setFilter(filter.copy(query = ""))
+    }
     // 标题取应用自身的 label（与桌面图标同名），测试版因此也显示「任务计划·测试版」。
     val context = LocalContext.current
     val appLabel = remember(context) { appDisplayName(context) }
@@ -172,7 +179,7 @@ fun TaskListScreen(
                 val allTasks = groups.values.flatten()
                 if (totalCount == 0) {
                     ReminderPermissionCard()
-                    CalendarPermissionCard(uncompletedCount)
+                    CalendarPermissionCard(unsyncedCount)
                     BackstageWarningCard(emptyList())
                     EmptyList(Modifier.fillMaxSize(), animOn)
                 } else if (total == 0) {
@@ -188,7 +195,7 @@ fun TaskListScreen(
                         contentPadding = PaddingValues(bottom = 96.dp),
                     ) {
                         item(key = "reminder-permission") { ReminderPermissionCard() }
-                        item(key = "calendar-permission") { CalendarPermissionCard(uncompletedCount) }
+                        item(key = "calendar-permission") { CalendarPermissionCard(unsyncedCount) }
                         // 权限之外的第二道坑：ROM 的「耗电行为控制」（无 API 可查，靠闹钟是否真响过反推）。
                         item(key = "backstage-warning") { BackstageWarningCard(allTasks) }
                         var appearIndex = 0

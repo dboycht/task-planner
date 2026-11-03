@@ -66,13 +66,22 @@ class TaskPlannerApp : Application(), CalendarSyncBridge {
 
     /** 同上，但覆盖全部维护职责（BootReceiver / 闹钟到点后走这条）。 */
     suspend fun maintenanceSyncNow(removed: List<Task> = emptyList()) {
-        withContext(Dispatchers.IO) {
-            repository.ensureRecurrence()
-            CalendarSyncManager.syncAll(this@TaskPlannerApp, repository.allTasks(), removed)
-            ReminderScheduler.sync(this@TaskPlannerApp, repository.allTasks())
-            WidgetUpdater.updateAll(this@TaskPlannerApp)
+        // 单飞：已在跑的同步会覆盖本次意图（它结束时读的是最新库态），避免并发双写
+        // ——实测并发的 ensureDedicatedCalendar 会在日历存储里建出两个「Task Planner」。
+        if (!maintenanceMutex.tryLock()) return
+        try {
+            withContext(Dispatchers.IO) {
+                repository.ensureRecurrence()
+                CalendarSyncManager.syncAll(this@TaskPlannerApp, repository.allTasks(), removed)
+                ReminderScheduler.sync(this@TaskPlannerApp, repository.allTasks())
+                WidgetUpdater.updateAll(this@TaskPlannerApp)
+            }
+        } finally {
+            maintenanceMutex.unlock()
         }
     }
+
+    private val maintenanceMutex = kotlinx.coroutines.sync.Mutex()
 
     override fun taskRepository(): TaskRepository = repository
 }
