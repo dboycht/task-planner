@@ -87,6 +87,8 @@ object NotificationHelper {
         if (!canPost(context)) return
         runCatching {
             NotificationManagerCompat.from(context).notify(requestCode(task.id, "notify"), notification)
+            // 通知真的被系统接受后才记账：「有没有按时响过」是判断厂商压制闹钟的唯一证据。
+            ReminderHealth.markDelivered(context)
         }
     }
 

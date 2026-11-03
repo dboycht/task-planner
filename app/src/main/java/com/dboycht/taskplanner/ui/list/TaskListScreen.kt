@@ -105,9 +105,11 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
             },
         ) { padding ->
             val total = groups.entries.sumOf { it.value.size }
+            val allTasks = groups.values.flatten()
             if (total == 0) {
                 Column(Modifier.fillMaxSize().padding(padding)) {
                     ReminderPermissionCard()
+                    BackstageWarningCard(allTasks)
                     EmptyList(Modifier.fillMaxSize(), animOn)
                 }
             } else {
@@ -118,6 +120,8 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
                     item(key = "reminder-permission") { ReminderPermissionCard() }
+                    // 权限之外的第二道坑：ROM 的「耗电行为控制」（无 API 可查，靠闹钟是否真响过反推）。
+                    item(key = "backstage-warning") { BackstageWarningCard(allTasks) }
                     var appearIndex = 0
                     groups.forEach { (group, tasks) ->
                         if (group == TaskGroup.DONE) {

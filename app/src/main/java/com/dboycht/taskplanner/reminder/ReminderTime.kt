@@ -91,6 +91,18 @@ fun planReminderSync(
 }
 
 /**
+ * 全部未完成任务的提醒触发时刻（含过去与未来），供「提醒是否按时响过」的健康判定使用。
+ * 已完成 / 无策略 / 锚点时间缺失的任务不贡献任何点。
+ */
+fun collectReminderTriggerTimes(tasks: List<Task>): List<Long> = tasks
+    .asSequence()
+    .filter { it.status != TaskStatus.DONE }
+    .flatMap { it.reminderPolicy.dueReminders(it.startTime, it.dueTime).asSequence() }
+    .map { it.triggerAt }
+    .sorted()
+    .toList()
+
+/**
  * 「等待多久后出发」的提示（列表/通知共用）：
  * 到点提醒 → null（文案用「现在开始 / 现在截止」）。
  */
