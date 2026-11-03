@@ -30,12 +30,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -43,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,14 +62,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dboycht.taskplanner.model.Task
+import com.dboycht.taskplanner.model.TaskFilter
 import com.dboycht.taskplanner.model.TaskGroup
 import com.dboycht.taskplanner.model.TaskStatus
 import com.dboycht.taskplanner.model.priorityLabel
@@ -76,13 +91,22 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskListScreen(onEdit: (Long?) -> Unit) {
+fun TaskListScreen(
+    onEdit: (Long?) -> Unit,
+    onOpenSettings: () -> Unit = {},
+) {
     val vm: TaskListViewModel = viewModel()
     val groups by vm.groups.collectAsStateWithLifecycle()
+    val filter by vm.filter.collectAsStateWithLifecycle()
+    val allTags by vm.allTags.collectAsStateWithLifecycle()
+    val totalCount by vm.totalCount.collectAsStateWithLifecycle()
+    val uncompletedCount by vm.uncompletedCount.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<Task?>(null) }
     var doneExpanded by rememberSaveable { mutableStateOf(false) }
     var celebrationTrigger by remember { mutableStateOf(0) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
     val animOn = rememberAnimationsEnabled()
     // 标题取应用自身的 label（与桌面图标同名），测试版因此也显示「任务计划·测试版」。
     val context = LocalContext.current
@@ -92,9 +116,36 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(appLabel) },
+                    title = {
+                        if (searching) {
+                            SearchField(
+                                query = filter.query,
+                                onQuery = { vm.setFilter(filter.copy(query = it)) },
+                                onClose = {
+                                    searching = false
+                                    vm.setFilter(filter.copy(query = ""))
+                                },
+                            )
+                        } else {
+                            Text(appLabel)
+                        }
+                    },
                     actions = {
+                        if (!searching) {
+                            IconButton(onClick = {
+                                searching = true
+                                showFilters = false
+                            }) {
+                                Icon(Icons.Filled.Search, contentDescription = "搜索")
+                            }
+                        }
+                        TextButton(onClick = { showFilters = !showFilters }) {
+                            Text(if (showFilters || filter.isActive) "筛选·" else "筛选")
+                        }
                         TextButton(onClick = { showAbout = true }) { Text("关于") }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = "设置")
+                        }
                     },
                 )
             },
@@ -104,87 +155,106 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
                 }
             },
         ) { padding ->
-            val total = groups.entries.sumOf { it.value.size }
-            val allTasks = groups.values.flatten()
-            if (total == 0) {
-                Column(Modifier.fillMaxSize().padding(padding)) {
-                    ReminderPermissionCard()
-                    BackstageWarningCard(allTasks)
-                    EmptyList(Modifier.fillMaxSize(), animOn)
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                val filterVisible = showFilters || filter.isActive
+                if (filterVisible) {
+                    FilterBar(
+                        filter = filter,
+                        allTags = allTags,
+                        onChange = { vm.setFilter(it) },
+                        onClear = {
+                            vm.setFilter(TaskFilter())
+                            showFilters = false
+                        },
+                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                ) {
-                    item(key = "reminder-permission") { ReminderPermissionCard() }
-                    // 权限之外的第二道坑：ROM 的「耗电行为控制」（无 API 可查，靠闹钟是否真响过反推）。
-                    item(key = "backstage-warning") { BackstageWarningCard(allTasks) }
-                    var appearIndex = 0
-                    groups.forEach { (group, tasks) ->
-                        if (group == TaskGroup.DONE) {
-                            // 已完成折叠区：头部常显（可点旋转箭头），内容展开/收起动画。
-                            val headerIdx = appearIndex++
-                            item(key = "header-${group.name}") {
-                                Appear(headerIdx, animOn) {
-                                    DoneGroupHeader(
-                                        count = tasks.size,
-                                        expanded = doneExpanded,
-                                        onClick = { doneExpanded = !doneExpanded },
-                                    )
+                val total = groups.entries.sumOf { it.value.size }
+                val allTasks = groups.values.flatten()
+                if (totalCount == 0) {
+                    ReminderPermissionCard()
+                    CalendarPermissionCard(uncompletedCount)
+                    BackstageWarningCard(emptyList())
+                    EmptyList(Modifier.fillMaxSize(), animOn)
+                } else if (total == 0) {
+                    // 有任务但被筛选光 → 显示「无匹配」并给出清除入口。
+                    NoMatchView(
+                        modifier = Modifier.fillMaxSize(),
+                        animOn = animOn,
+                        onClear = { vm.setFilter(TaskFilter()) },
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                    ) {
+                        item(key = "reminder-permission") { ReminderPermissionCard() }
+                        item(key = "calendar-permission") { CalendarPermissionCard(uncompletedCount) }
+                        // 权限之外的第二道坑：ROM 的「耗电行为控制」（无 API 可查，靠闹钟是否真响过反推）。
+                        item(key = "backstage-warning") { BackstageWarningCard(allTasks) }
+                        var appearIndex = 0
+                        groups.forEach { (group, tasks) ->
+                            if (group == TaskGroup.DONE) {
+                                // 已完成折叠区：头部常显（可点旋转箭头），内容展开/收起动画。
+                                val headerIdx = appearIndex++
+                                item(key = "header-${group.name}") {
+                                    Appear(headerIdx, animOn) {
+                                        DoneGroupHeader(
+                                            count = tasks.size,
+                                            expanded = doneExpanded,
+                                            onClick = { doneExpanded = !doneExpanded },
+                                        )
+                                    }
                                 }
-                            }
-                            item(key = "done-content") {
-                                AnimatedVisibility(
-                                    visible = doneExpanded,
-                                    enter = expandVertically(tween(260, easing = EASE)) +
-                                        fadeIn(tween(220)),
-                                    exit = shrinkVertically(tween(220, easing = EASE)) +
-                                        fadeOut(tween(160)),
-                                ) {
-                                    Column {
-                                        tasks.forEach { task ->
-                                            TaskRow(
-                                                task = task,
-                                                onClick = { onEdit(task.id) },
-                                                onToggle = { vm.toggleDone(task) },
-                                                onLongPress = { deleteTarget = task },
-                                            )
+                                item(key = "done-content") {
+                                    AnimatedVisibility(
+                                        visible = doneExpanded,
+                                        enter = expandVertically(tween(260, easing = EASE)) +
+                                            fadeIn(tween(220)),
+                                        exit = shrinkVertically(tween(220, easing = EASE)) +
+                                            fadeOut(tween(160)),
+                                    ) {
+                                        Column {
+                                            tasks.forEach { task ->
+                                                TaskRow(
+                                                    task = task,
+                                                    onClick = { onEdit(task.id) },
+                                                    onToggle = { vm.toggleDone(task) },
+                                                    onLongPress = { deleteTarget = task },
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        } else {
-                            val headerIdx = appearIndex++
-                            item(key = "header-${group.name}") {
-                                Appear(headerIdx, animOn) {
-                                    GroupHeader("${group.label} · ${tasks.size}")
+                            } else {
+                                val headerIdx = appearIndex++
+                                item(key = "header-${group.name}") {
+                                    Appear(headerIdx, animOn) {
+                                        GroupHeader("${group.label} · ${tasks.size}")
+                                    }
                                 }
-                            }
-                            val base = appearIndex
-                            appearIndex += tasks.size
-                            itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
-                                Appear(base + index, animOn) {
-                                    Box(
-                                        Modifier.animateItem(
-                                            fadeInSpec = tween(220),
-                                            fadeOutSpec = tween(180),
-                                        )
-                                    ) {
-                                        TaskRow(
-                                            task = task,
-                                            onClick = { onEdit(task.id) },
-                                            onToggle = {
-                                                // 未完成 → 完成才庆祝；取消完成不庆祝。
-                                                if (task.status != TaskStatus.DONE) {
-                                                    celebrationTrigger++
-                                                }
-                                                vm.toggleDone(task)
-                                            },
-                                            onLongPress = { deleteTarget = task },
-                                        )
+                                val base = appearIndex
+                                appearIndex += tasks.size
+                                itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
+                                    Appear(base + index, animOn) {
+                                        Box(
+                                            Modifier.animateItem(
+                                                fadeInSpec = tween(220),
+                                                fadeOutSpec = tween(180),
+                                            )
+                                        ) {
+                                            TaskRow(
+                                                task = task,
+                                                onClick = { onEdit(task.id) },
+                                                onToggle = {
+                                                    // 未完成 → 完成才庆祝；取消完成不庆祝。
+                                                    if (task.status != TaskStatus.DONE) {
+                                                        celebrationTrigger++
+                                                    }
+                                                    vm.toggleDone(task)
+                                                },
+                                                onLongPress = { deleteTarget = task },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -197,23 +267,161 @@ fun TaskListScreen(onEdit: (Long?) -> Unit) {
     }
 
     deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("删除任务") },
-            text = { Text("确定删除「${target.title}」吗？该操作不可撤销。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.delete(target)
-                    deleteTarget = null
-                }) { Text("删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+        DeleteTaskDialog(
+            target = target,
+            onDismiss = { deleteTarget = null },
+            onDelete = { series ->
+                vm.delete(target, series)
+                deleteTarget = null
             },
         )
     }
 
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+}
+
+/** 删除确认：重复任务区分「仅此次」与「整个系列」。 */
+@Composable
+private fun DeleteTaskDialog(
+    target: Task,
+    onDismiss: () -> Unit,
+    onDelete: (deleteSeries: Boolean) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除任务") },
+        text = {
+            if (target.recurRule.isRecurring) {
+                Text(
+                    "「${target.title}」是重复任务（${target.recurRule.label()}）。\n" +
+                        "「仅此次」删除这一条并让系列止于此；「整个系列」删除全部重复实例。"
+                )
+            } else {
+                Text("确定删除「${target.title}」吗？该操作不可撤销。")
+            }
+        },
+        confirmButton = {
+            if (target.recurRule.isRecurring) {
+                Row {
+                    TextButton(onClick = { onDelete(false) }) { Text("仅此次") }
+                    TextButton(onClick = { onDelete(true) }) { Text("整个系列") }
+                }
+            } else {
+                TextButton(onClick = { onDelete(false) }) { Text("删除") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+/** 顶栏内嵌搜索框：无边框、占位文案、右侧清空/退出。 */
+@Composable
+private fun SearchField(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQuery,
+            singleLine = true,
+            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            decorationBox = { inner ->
+                Box {
+                    if (query.isEmpty()) {
+                        Text(
+                            "搜索标题 / 描述 / 标签",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
+        IconButton(onClick = onClose) {
+            Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
+        }
+    }
+}
+
+/** 筛选条：状态 / 优先级两排单选 + 标签多选；有任一激活时末尾给「清除」。 */
+@Composable
+private fun FilterBar(
+    filter: TaskFilter,
+    allTags: List<String>,
+    onChange: (TaskFilter) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                FilterChip(
+                    selected = filter.status == null,
+                    onClick = { onChange(filter.copy(status = null)) },
+                    label = { Text("全部状态") },
+                )
+            }
+            TaskStatus.entries.forEach { s ->
+                item {
+                    FilterChip(
+                        selected = filter.status == s,
+                        onClick = {
+                            onChange(filter.copy(status = if (filter.status == s) null else s))
+                        },
+                        label = { Text(s.label) },
+                    )
+                }
+            }
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                FilterChip(
+                    selected = filter.priorityBucket == null,
+                    onClick = { onChange(filter.copy(priorityBucket = null)) },
+                    label = { Text("全部优先级") },
+                )
+            }
+            listOf(2 to "高", 1 to "中", 0 to "低").forEach { (bucket, label) ->
+                item {
+                    FilterChip(
+                        selected = filter.priorityBucket == bucket,
+                        onClick = {
+                            onChange(
+                                filter.copy(
+                                    priorityBucket = if (filter.priorityBucket == bucket) null else bucket
+                                )
+                            )
+                        },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+        if (allTags.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                itemsIndexed(allTags, key = { _, tag -> tag }) { _, tag ->
+                    FilterChip(
+                        selected = tag in filter.tags,
+                        onClick = {
+                            val next = filter.tags.toMutableSet()
+                            if (tag in next) next.remove(tag) else next.add(tag)
+                            onChange(filter.copy(tags = next))
+                        },
+                        label = { Text(tag) },
+                    )
+                }
+            }
+        }
+        if (filter.isActive) {
+            TextButton(onClick = onClear) { Text("清除全部筛选") }
+        }
+    }
 }
 
 @Composable
@@ -249,6 +457,33 @@ private fun EmptyList(modifier: Modifier = Modifier, animOn: Boolean) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/** 有任务但被筛光：放大镜 + 清除筛选入口。 */
+@Composable
+private fun NoMatchView(modifier: Modifier = Modifier, animOn: Boolean, onClear: () -> Unit) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("🔍", style = MaterialTheme.typography.displaySmall)
+            Spacer(Modifier.height(8.dp))
+            Appear(1, animOn) { Text("没有匹配的任务", style = MaterialTheme.typography.titleMedium) }
+            Spacer(Modifier.height(4.dp))
+            Appear(2, animOn) {
+                Text(
+                    "换个关键词，或清除筛选条件",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Appear(3, animOn) {
+                TextButton(onClick = onClear) { Text("清除全部筛选") }
             }
         }
     }
@@ -330,6 +565,14 @@ private fun TaskRow(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PriorityChip(task.priority)
+                if (task.recurRule.isRecurring) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "· ↻ ${task.recurRule.label()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (task.status == TaskStatus.DOING) {
                     Spacer(Modifier.width(6.dp))
                     Text(

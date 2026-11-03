@@ -20,6 +20,7 @@ import com.dboycht.taskplanner.ui.edit.EditScreen
 import com.dboycht.taskplanner.ui.list.TaskListScreen
 import com.dboycht.taskplanner.ui.preset.PresetEditScreen
 import com.dboycht.taskplanner.ui.preset.PresetListScreen
+import com.dboycht.taskplanner.ui.settings.SettingsScreen
 
 @Composable
 fun TaskPlannerRoot(
@@ -40,6 +41,10 @@ fun TaskPlannerRoot(
     fun pushPreset(presetId: Long?) {
         stackKeys = stackKeys + Screen.EditPreset(presetId, visitSeq).encode()
         visitSeq += 1
+    }
+
+    fun pushSettings() {
+        stackKeys = stackKeys + Screen.Settings.encode()
     }
 
     // 从提醒通知点进来：直接压到「列表 → 该任务编辑页」，返回即回列表。
@@ -89,6 +94,7 @@ fun TaskPlannerRoot(
         when (val current = decodeScreen(keys.last())) {
             is Screen.List -> TaskListScreen(
                 onEdit = { id -> pushTask(id) },
+                onOpenSettings = ::pushSettings,
             )
             is Screen.EditTask -> EditScreen(
                 taskId = current.taskId,
@@ -107,6 +113,7 @@ fun TaskPlannerRoot(
                 visitId = current.visitId,
                 onBack = ::back,
             )
+            is Screen.Settings -> SettingsScreen(onBack = ::back)
         }
     }
 }

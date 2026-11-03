@@ -13,12 +13,14 @@ sealed interface Screen {
     data class EditTask(val taskId: Long?, val visitId: Long) : Screen
     data object Presets : Screen
     data class EditPreset(val presetId: Long?, val visitId: Long) : Screen
+    data object Settings : Screen
 }
 
 /** 编码成 Bundle 兼容的字符串以支持 rememberSaveable（进程重建不丢栈）。 */
 internal fun Screen.encode(): String = when (this) {
     is Screen.List -> "list"
     is Screen.Presets -> "presets"
+    is Screen.Settings -> "settings"
     is Screen.EditTask -> "task:${taskId ?: "new"}:$visitId"
     is Screen.EditPreset -> "preset:${presetId ?: "new"}:$visitId"
 }
@@ -35,6 +37,7 @@ private fun String.toTargetOrNull(): Long? = when (this) {
 internal fun decodeScreen(raw: String): Screen {
     if (raw == "list") return Screen.List
     if (raw == "presets") return Screen.Presets
+    if (raw == "settings") return Screen.Settings
 
     val parts = raw.split(':')
     // 旧版编码 "task:12" / "task:new" 没有 visitId，按 0 处理即可（老栈恢复后仍可编辑）。

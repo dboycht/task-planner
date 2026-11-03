@@ -98,6 +98,25 @@ fun EditScreen(
     val error = vm.error
     var showPresetSheet by remember { mutableStateOf(false) }
     val animOn = rememberAnimationsEnabled()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showCalRationale by remember { mutableStateOf(false) }
+    var pendingSave by remember { mutableStateOf(false) }
+
+    // M2：首次保存任务时申请日历权限（用户选定的方案）。拒绝 ⇒ 照常保存（纯本地），列表横幅引导。
+    val calPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { pendingSave = false; vm.save(onBack) }
+
+    fun requestSave() {
+        val syncOn = com.dboycht.taskplanner.calendar.CalendarSettings.syncEnabled(context)
+        val granted = com.dboycht.taskplanner.calendar.CalendarSyncManager.hasPermission(context)
+        if (syncOn && !granted) {
+            pendingSave = true
+            showCalRationale = true
+        } else {
+            vm.save(onBack)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -108,7 +127,7 @@ fun EditScreen(
                 },
                 actions = {
                     TextButton(
-                        onClick = { vm.save(onBack) },
+                        onClick = ::requestSave,
                         enabled = draft.loaded && error == null,
                     ) { Text("保存") }
                 },
@@ -172,6 +191,14 @@ fun EditScreen(
             }
 
             Appear(6, animOn) {
+                RecurrenceSelector(
+                    rule = draft.recurRule,
+                    hasDue = draft.dueTime != null,
+                    onRule = vm::updateRecurRule,
+                )
+            }
+
+            Appear(7, animOn) {
                 OutlinedTextField(
                     value = draft.tags,
                     onValueChange = vm::updateTags,
@@ -182,7 +209,7 @@ fun EditScreen(
             }
 
             // 提醒预设选择入口
-            Appear(7, animOn) {
+            Appear(8, animOn) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -248,6 +275,42 @@ fun EditScreen(
                 onOpenPresets()
             },
             onDismiss = { showPresetSheet = false },
+        )
+    }
+
+    if (showCalRationale) {
+        AlertDialog(
+            onDismissRequest = {
+                showCalRationale = false
+                if (pendingSave) {
+                    pendingSave = false
+                    vm.save(onBack)
+                }
+            },
+            title = { Text("写入系统日历？") },
+            text = {
+                Text(
+                    "授权后，任务会自动同步到系统日历（默认建一个专属日历「Task Planner」），并按提醒策略挂日历提醒作兜底。\n\n拒绝也可以：任务只保存在本应用，之后可在设置里随时开启。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCalRationale = false
+                    calPermissionLauncher.launch(
+                        arrayOf(
+                            android.Manifest.permission.READ_CALENDAR,
+                            android.Manifest.permission.WRITE_CALENDAR,
+                        )
+                    )
+                }) { Text("去授权") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCalRationale = false
+                    pendingSave = false
+                    vm.save(onBack)
+                }) { Text("仅本地保存") }
+            },
         )
     }
 }
@@ -364,6 +427,89 @@ private fun SectionLabel(text: String) {
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * 重复选择：不重复 / 每天 / 每周 / 每月 / 自定义 N 天。
+ * 重复依赖截止时间：没填时给出提示（保存校验同样拦）。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RecurrenceSelector(
+    rule: com.dboycht.taskplanner.model.RecurrenceRule,
+    hasDue: Boolean,
+    onRule: (com.dboycht.taskplanner.model.RecurrenceRule) -> Unit,
+) {
+    Column {
+        SectionLabel("重复")
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val options = listOf(
+                com.dboycht.taskplanner.model.RecurrenceRule.NONE to "不重复",
+                com.dboycht.taskplanner.model.RecurrenceRule(com.dboycht.taskplanner.model.RecurKind.DAILY) to "每天",
+                com.dboycht.taskplanner.model.RecurrenceRule(com.dboycht.taskplanner.model.RecurKind.WEEKLY) to "每周",
+                com.dboycht.taskplanner.model.RecurrenceRule(com.dboycht.taskplanner.model.RecurKind.MONTHLY) to "每月",
+            )
+            options.forEach { (option, label) ->
+                FilterChip(
+                    selected = rule == option,
+                    onClick = { onRule(option) },
+                    label = { Text(label) },
+                )
+            }
+            FilterChip(
+                selected = rule.kind == com.dboycht.taskplanner.model.RecurKind.CUSTOM_DAYS,
+                onClick = {
+                    onRule(
+                        if (rule.kind == com.dboycht.taskplanner.model.RecurKind.CUSTOM_DAYS) {
+                            rule
+                        } else {
+                            com.dboycht.taskplanner.model.RecurrenceRule(
+                                com.dboycht.taskplanner.model.RecurKind.CUSTOM_DAYS,
+                                3,
+                            )
+                        }
+                    )
+                },
+                label = {
+                    Text(
+                        if (rule.kind == com.dboycht.taskplanner.model.RecurKind.CUSTOM_DAYS) {
+                            "每 ${rule.intervalDays} 天"
+                        } else "自定义"
+                    )
+                },
+            )
+        }
+        if (rule.kind == com.dboycht.taskplanner.model.RecurKind.CUSTOM_DAYS) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = {
+                    val next = (rule.intervalDays - 1).coerceAtLeast(
+                        com.dboycht.taskplanner.model.RecurrenceRule.MIN_CUSTOM_DAYS
+                    )
+                    onRule(rule.copy(intervalDays = next))
+                }) { Text("−") }
+                Text(
+                    "每 ${rule.intervalDays} 天",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                TextButton(onClick = {
+                    val next = (rule.intervalDays + 1).coerceAtMost(
+                        com.dboycht.taskplanner.model.RecurrenceRule.MAX_CUSTOM_DAYS
+                    )
+                    onRule(rule.copy(intervalDays = next))
+                }) { Text("＋") }
+            }
+        }
+        if (rule.isRecurring && !hasDue) {
+            Text(
+                "重复任务需要先设置截止时间",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
 }
 
 /** 时间行：点击弹「日期 → 时间」两级选择器；已设置时提供清除。 */
