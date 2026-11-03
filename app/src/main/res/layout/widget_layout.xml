@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="今日无事 · 享受闲暇"
+        android:textColor="@color/widget_on_surface_variant"
+        android:textSize="13sp" />
+
+    <ListView
+        android:id="@+id/widget_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:scrollbars="none" />
+</FrameLayout>

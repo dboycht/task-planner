@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0F766E</color>
+    <!-- 小组件配色（亮色）：背景/主文字/次文字/分组标题。深色变体在 values-night。 -->
+    <color name="widget_surface">#F7F4EC</color>
+    <color name="widget_on_surface">#1B1C1E</color>
+    <color name="widget_on_surface_variant">#5F6368</color>
+    <color name="widget_header">#0F766E</color>
 </resources>

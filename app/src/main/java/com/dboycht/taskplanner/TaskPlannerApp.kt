@@ -10,6 +10,7 @@ import com.dboycht.taskplanner.data.TaskRepository
 import com.dboycht.taskplanner.model.Task
 import com.dboycht.taskplanner.reminder.NotificationHelper
 import com.dboycht.taskplanner.reminder.ReminderScheduler
+import com.dboycht.taskplanner.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,8 +38,9 @@ class TaskPlannerApp : Application(), CalendarSyncBridge {
         presetRepository.ensureSeeded()
         NotificationHelper.ensureChannel(this)
         // 启动即对齐一次：装包后角色变更、上次被系统清掉的闹钟都在这里补上；
-        // 重复任务的滚动窗口也在此保底补出下一次实例。
+        // 重复任务的滚动窗口也在此保底补出下一次实例；有小组件时顺带刷新。
         maintenanceSync()
+        WidgetUpdater.updateAll(this)
     }
 
     /** 任务增删改 / 勾选完成后触发全量重排（后台线程，不阻塞调用方）。 */
@@ -68,6 +70,7 @@ class TaskPlannerApp : Application(), CalendarSyncBridge {
             repository.ensureRecurrence()
             CalendarSyncManager.syncAll(this@TaskPlannerApp, repository.allTasks(), removed)
             ReminderScheduler.sync(this@TaskPlannerApp, repository.allTasks())
+            WidgetUpdater.updateAll(this@TaskPlannerApp)
         }
     }
 
