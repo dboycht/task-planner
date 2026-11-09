@@ -41,108 +41,157 @@ class BackstagePolicyTest {
 
     // ---------- 是否怀疑提醒被压制 ----------
 
+    /**
+     * 判定只追究「我们确实排过、且已到点」的那条闹钟（snapshot.expectedTriggerAt）。
+     * 任务上的历史提醒点不算数 —— 调度层每条任务只排下一个未到点的提醒。
+     */
+
     @Test
-    fun `没有已到点的提醒时不提示`() {
-        val now = 100 * minute
-        val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(200 * minute), // 全在未来
-            lastDeliveredAt = null,
-            now = now,
+    fun `没排过闹钟时不提示（新装或清数据）`() {
+        assertNull(
+            suspectMissedReminder(
+                ReminderHealthSnapshot(
+                    dueTriggerTimes = listOf(200 * minute),
+                    lastDeliveredAt = null,
+                    now = 300 * minute,
+                    expectedTriggerAt = null,
+                )
+            )
         )
-        assertNull(suspectMissedReminder(snapshot))
     }
 
     @Test
-    fun `空任务列表与从未响过都不提示`() {
+    fun `排过的闹钟还没到点时不提示`() {
+        val now = 100 * minute
         assertNull(
             suspectMissedReminder(
-                ReminderHealthSnapshot(dueTriggerTimes = emptyList(), lastDeliveredAt = null, now = 100 * minute)
+                ReminderHealthSnapshot(
+                    dueTriggerTimes = listOf(500 * minute),
+                    lastDeliveredAt = null,
+                    now = now,
+                    expectedTriggerAt = 200 * minute, // 未来
+                )
             )
         )
     }
 
     @Test
     fun `刚过点还在宽限期内不提示`() {
-        val due = 100 * minute
+        val expected = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(due),
+            dueTriggerTimes = listOf(expected),
             lastDeliveredAt = null,
-            now = due + 5 * minute, // 只过了 5 分钟
+            now = expected + 5 * minute, // 只过了 5 分钟
+            expectedTriggerAt = expected,
         )
         assertNull(suspectMissedReminder(snapshot, graceMs = REMINDER_GRACE_MS))
     }
 
     @Test
     fun `过了宽限期仍没响过则提示`() {
-        val due = 100 * minute
+        val expected = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(due),
+            dueTriggerTimes = listOf(expected),
             lastDeliveredAt = null,
-            now = due + 11 * minute,
+            now = expected + 11 * minute,
+            expectedTriggerAt = expected,
         )
-        assertEquals(due, suspectMissedReminder(snapshot))
+        assertEquals(expected, suspectMissedReminder(snapshot))
     }
 
     @Test
     fun `这次到点之后响过就不提示`() {
-        val due = 100 * minute
+        val expected = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(due),
-            lastDeliveredAt = due + 30_000L, // 到点后 30 秒发出
-            now = due + 11 * minute,
+            dueTriggerTimes = listOf(expected),
+            lastDeliveredAt = expected + 30_000L, // 到点后 30 秒发出
+            now = expected + 11 * minute,
+            expectedTriggerAt = expected,
         )
         assertNull(suspectMissedReminder(snapshot))
     }
 
     @Test
     fun `只响过比这次更早的提醒不算数`() {
-        val oldDue = 50 * minute
-        val newDue = 100 * minute
+        val oldExpected = 50 * minute
+        val newExpected = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(oldDue, newDue),
-            lastDeliveredAt = oldDue + 30_000L, // 上一次响了，这一次没响
-            now = newDue + 11 * minute,
+            dueTriggerTimes = listOf(oldExpected, newExpected),
+            lastDeliveredAt = oldExpected + 30_000L, // 上一次响了，这一次没响
+            now = newExpected + 11 * minute,
+            expectedTriggerAt = newExpected,
         )
-        assertEquals(newDue, suspectMissedReminder(snapshot))
+        assertEquals(newExpected, suspectMissedReminder(snapshot))
     }
 
+    // ---------- 本轮修复的误报：陈旧未完成任务的过期提醒点 ----------
+
     @Test
-    fun `只看最近一个已到点的提醒，更早的不算系统问题`() {
-        val ancientDue = 10 * minute // 很久以前到点、当时可能还没装应用
-        val latestDue = 100 * minute
+    fun `陈旧未完成任务的过期提醒点不再触发横幅（本次修复的缺陷）`() {
+        // 真机场景：一条 11-06 就过期、一直没勾完成的任务，提醒点早已过去；
+        // 但调度层从未为它排过闹钟（只排下一个未到点的提醒）。
+        // 旧判据把它当成「最近一次到点却没响」⇒ 横幅永久误报。
+        val stalePastTrigger = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(latestDue, ancientDue), // 乱序输入也要正确
-            lastDeliveredAt = latestDue + 1_000L,
-            now = latestDue + 11 * minute,
+            dueTriggerTimes = listOf(stalePastTrigger),
+            lastDeliveredAt = null,
+            now = 300 * minute,
+            expectedTriggerAt = null, // 从没排过 ⇒ 不该追究
         )
         assertNull(suspectMissedReminder(snapshot))
     }
 
     @Test
-    fun `未来提醒混在列表里不影响判定`() {
-        val due = 100 * minute
+    fun `排过的闹钟太久以前也不提示（无从取证）`() {
+        val expected = 100 * minute
         val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(due, 500 * minute, 900 * minute),
+            dueTriggerTimes = listOf(expected),
             lastDeliveredAt = null,
-            now = due + 11 * minute,
+            now = expected + REMINDER_LOOKBACK_MS + 1, // 超出回看窗口
+            expectedTriggerAt = expected,
         )
-        assertEquals(due, suspectMissedReminder(snapshot))
+        assertNull(suspectMissedReminder(snapshot))
+    }
+
+    @Test
+    fun `回看窗口边界内仍然提示`() {
+        val expected = 100 * minute
+        val snapshot = ReminderHealthSnapshot(
+            dueTriggerTimes = listOf(expected),
+            lastDeliveredAt = null,
+            now = expected + REMINDER_LOOKBACK_MS, // 恰好等于窗口
+            expectedTriggerAt = expected,
+        )
+        assertEquals(expected, suspectMissedReminder(snapshot))
+    }
+
+    @Test
+    fun `未来提醒混在列表里不影响判定`() {
+        val expected = 100 * minute
+        val snapshot = ReminderHealthSnapshot(
+            dueTriggerTimes = listOf(expected, 500 * minute, 900 * minute),
+            lastDeliveredAt = null,
+            now = expected + 11 * minute,
+            expectedTriggerAt = expected,
+        )
+        assertEquals(expected, suspectMissedReminder(snapshot))
     }
 
     @Test
     fun `宽限期可注入，边界取等`() {
-        val due = 100 * minute
-        val snapshot = ReminderHealthSnapshot(
-            dueTriggerTimes = listOf(due),
-            lastDeliveredAt = null,
-            now = due + 10 * minute, // 恰好等于宽限
-        )
+        val expected = 100 * minute
         // 恰好等于宽限期 → 已构成「过点 10 分钟没响」，提示
-        assertEquals(due, suspectMissedReminder(snapshot, graceMs = 10 * minute))
+        assertEquals(
+            expected,
+            suspectMissedReminder(
+                ReminderHealthSnapshot(listOf(expected), null, expected + 10 * minute, expected),
+                graceMs = 10 * minute,
+            ),
+        )
         // 少 1 毫秒 → 还不算
         assertNull(
             suspectMissedReminder(
-                ReminderHealthSnapshot(listOf(due), null, due + 10 * minute - 1),
+                ReminderHealthSnapshot(listOf(expected), null, expected + 10 * minute - 1, expected),
                 graceMs = 10 * minute,
             )
         )

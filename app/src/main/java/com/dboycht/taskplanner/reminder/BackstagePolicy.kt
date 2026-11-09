@@ -71,9 +71,12 @@ fun openBackstageSettings(context: Context): Boolean {
 /**
  * 提醒健康度：用来决定是否向用户出示「提醒可能不响」的引导。
  *
- * 判据刻意保守 —— **拿不到问题证据就不打扰**：
- * - 没有「已到点的提醒」⇒ 不提示（也就不会因为一条过去的任务天天弹横幅）；
- * - 最近一个已到点的提醒，过了宽限期仍没有「已响」记录 ⇒ 提示。
+ * 判据刻意保守 —— **拿不到问题证据就不打扰**。三个必要条件缺一不可：
+ * - **我们真的排过闹钟**（[expectedTriggerAt] 非空）—— 任务上存在过去的提醒点，
+ *   不等于我们为它排过闹钟（调度层每条任务只排「下一个未到点的提醒」），
+ *   否则一条早该过期、一直没勾完成的旧任务会让横幅永久亮着（误报）；
+ * - 那条排过的闹钟**已经到点**且过了宽限期；
+ * - 到点之后**仍没有**「已响」记录。
  *
  * 「已响」记录由 [ReminderHealth] 在真正发出通知后写入。
  */
@@ -83,25 +86,48 @@ data class ReminderHealthSnapshot(
     /** 本应用最后一次真正发出提醒通知的时刻；null = 从未响过。 */
     val lastDeliveredAt: Long?,
     val now: Long,
+    /**
+     * 本应用**最后一次真正排进系统的闹钟时刻**；null = 从未排过（新装/清数据）。
+     * 只有它才可能「到点没响」，任务上的历史提醒点不算数。
+     */
+    val expectedTriggerAt: Long? = null,
 )
 
 /** 宽限：闹钟有几十秒误差、节电模式下也会略晚，留 10 分钟。 */
 const val REMINDER_GRACE_MS: Long = 10 * 60_000L
 
 /**
- * 若怀疑「最近一个到点的提醒被系统压制」，返回那个提醒时刻；否则 null。
+ * 只在「刚过去不久」的窗口内追究漏提醒。
  *
- * 只看**最近一次**已到点的提醒：更早的提醒可能发生在用户装好应用/设置提醒之前，
- * 不该算到系统头上。
+ * 为什么需要窗口：`expectedTriggerAt` 是**上一次排程的时刻**，如果应用很久没被打开、
+ * 或那条闹钟是被用户手动取消的，它会一直停在过去。没有窗口的话，一次陈年漏响会让
+ * 横幅从此常亮 —— 而用户要的是「现在提醒还灵不灵」。超过窗口就当作**无从取证**，
+ * 不提示（保守优先）。
+ */
+const val REMINDER_LOOKBACK_MS: Long = 48 * 60 * 60_000L
+
+/**
+ * 若怀疑「最近一次排过的提醒被系统压制」，返回那个提醒时刻；否则 null。
+ *
+ * 只看**我们确实排过的那一条**（[ReminderHealthSnapshot.expectedTriggerAt]），
+ * 并且要求它落在 [lookbackMs] 窗口内：更早的排程已被后续排程取代，
+ * 更谈不上「系统的锅」。
  */
 fun suspectMissedReminder(
     snapshot: ReminderHealthSnapshot,
     graceMs: Long = REMINDER_GRACE_MS,
+    lookbackMs: Long = REMINDER_LOOKBACK_MS,
 ): Long? {
-    val latestDue = snapshot.dueTriggerTimes.filter { it <= snapshot.now }.maxOrNull() ?: return null
-    if (snapshot.now - latestDue < graceMs) return null
+    // 没排过闹钟 ⇒ 没有可追究的对象（新装、清数据、全部任务已完成）。
+    val expected = snapshot.expectedTriggerAt ?: return null
+    // 还没到点 → 没到该响的时候。
+    if (expected > snapshot.now) return null
+    // 到点但还在宽限期内 → 再等等。
+    if (snapshot.now - expected < graceMs) return null
+    // 太久以前的事 → 无从取证，不打扰。
+    if (snapshot.now - expected > lookbackMs) return null
+    // 响过，且是这次排程之后响的 ⇒ 正常，不提示。
     val delivered = snapshot.lastDeliveredAt
-    // 响过，且是这次到点之后响的 ⇒ 正常，不提示。
-    if (delivered != null && delivered >= latestDue) return null
-    return latestDue
+    if (delivered != null && delivered >= expected) return null
+    return expected
 }

@@ -71,6 +71,7 @@ fun BackstageWarningCard(tasks: List<Task>, modifier: Modifier = Modifier) {
                     dueTriggerTimes = collectReminderTriggerTimes(tasks),
                     lastDeliveredAt = ReminderHealth.lastDeliveredAt(context),
                     now = System.currentTimeMillis(),
+                    expectedTriggerAt = ReminderHealth.expectedTriggerAt(context),
                 )
             ) != null
         }

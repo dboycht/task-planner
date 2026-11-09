@@ -34,6 +34,9 @@ object ReminderScheduler {
         plan.toSchedule.forEach { (taskId, at) -> setAlarm(context, taskId, at) }
         plan.toCancel.forEach { taskId -> cancelAlarm(context, taskId) }
         writeScheduledIds(context, plan.toSchedule.keys)
+        // 记下「真的排进系统的最早一条闹钟」：健康判定只该追究我们确实排过的点
+        // （见 ReminderHealth.markExpectedTrigger 的理由）。
+        plan.toSchedule.values.minOrNull()?.let { ReminderHealth.markExpectedTrigger(context, it) }
     }
 
     /** 单个任务的闹钟取消（删除任务 / 标记完成 / 用户点通知里的「完成」）。 */
