@@ -25,6 +25,8 @@ local.properties
 DEVELOPMENT.md
 ERROR.md
 HANDOVER.md
+ACCEPTANCE.md
+logs/
 _research/
 _scratch/
 capture/
